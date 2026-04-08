@@ -1,0 +1,1581 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PhucFlex - Cinema</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        /* CSS GIAO DIỆN (GIỮ NGUYÊN 100%) */
+        body { background-color: #141414; color: #fff; font-family: 'Roboto', sans-serif; overflow: hidden; margin: 0; }
+        .chrome-bar { height: 45px; background: #000; display: flex; align-items: flex-end; padding: 0 10px; border-bottom: 1px solid #333; }
+        .chrome-tab { padding: 8px 25px; background: #222; color: #888; border-radius: 10px 10px 0 0; margin-right: 5px; cursor: pointer; user-select: none; transition: 0.2s; font-size: 0.9rem; display: flex; align-items: center; gap: 8px; }
+        .chrome-tab:hover { background: #333; color: #ccc; }
+        .chrome-tab.active { background: #E50914; color: #fff; font-weight: bold; height: 40px; }
+        
+        #home-screen { height: calc(100vh - 45px); overflow-y: auto; padding: 40px; background: linear-gradient(to bottom, #000, #141414); display: none; }
+        .home-title { font-family: 'Bebas Neue'; font-size: 3rem; color: #E50914; margin-bottom: 20px; }
+        .poster-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 25px; }
+        .movie-card { background: #222; border-radius: 8px; overflow: hidden; cursor: pointer; transition: transform 0.3s; position: relative; border: 1px solid #333; }
+        .movie-card:hover { transform: scale(1.05); z-index: 10; border-color: #E50914; }
+        .poster-img { width: 100%; aspect-ratio: 2/3; object-fit: cover; background: #222; display: block; }
+        .movie-info { padding: 15px; background: linear-gradient(to top, #141414 80%, transparent); }
+        .movie-name { font-weight: bold; font-size: 1.1rem; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        
+        #player-screen { display: none; height: calc(100vh - 45px); display: flex; }
+        .player-col { flex: 3; display: flex; flex-direction: column; background: #000; position: relative; }
+        .iframe-wrapper { position: relative; width: 100%; padding-bottom: 56.25%; background: #000; }
+        iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; }
+        .info-panel { padding: 20px; }
+        .list-col { flex: 1; background: #181818; border-left: 1px solid #333; display: flex; flex-direction: column; }
+        .search-area { padding: 15px; border-bottom: 1px solid #333; }
+        .ep-list { flex-grow: 1; overflow-y: auto; padding: 10px; }
+        .ep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(65px, 1fr)); gap: 8px; }
+        
+        .ep-card { background: #333; padding: 10px 0; text-align: center; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.9rem; }
+        .ep-card:hover { background: #555; }
+        .ep-card.active { background: #fff; color: #000; border: 2px solid #E50914; }
+        .ep-card.watched { color: #777; background: #222; }
+        .ep-card.watched::after { content: ""; position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background: #E50914; }
+        
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #111; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+    <div class="chrome-bar">
+        <div class="chrome-tab active" id="tab-home" onclick="app.goHome()">🏠 TRANG CHỦ</div>
+        <div class="chrome-tab" id="tab-movie" onclick="app.showPlayer()" style="display: none;">🎬 <span id="tab-movie-name">Phim đang xem</span></div>
+    </div>
+
+    <div id="home-screen">
+        <div class="home-title">PHUCFLEX MOVIES</div>
+        <div class="poster-grid" id="home-grid"></div>
+    </div>
+
+    <div id="player-screen">
+        <div class="player-col">
+            <div class="iframe-wrapper"><iframe id="main-player" src="" allowfullscreen></iframe></div>
+            <div class="info-panel">
+                <h2 style="font-family: 'Bebas Neue'; color: #E50914;">PHUCFLEX</h2>
+                <h4 class="mt-2 text-white" id="movie-name-display">...</h4>
+                <div class="text-secondary">
+                    <span id="ep-status" class="text-danger fw-bold">Chọn tập phim</span> | 
+                    Tổng: <span id="total-count">0</span>
+                </div>
+            </div>
+        </div>
+        <div class="list-col">
+            <div class="search-area">
+                <input type="text" id="search-input" class="form-control bg-dark text-white border-secondary" placeholder="Tìm tập...">
+                <div class="d-flex gap-2 mt-2">
+                    <button class="btn btn-outline-light btn-sm w-50" onclick="app.reverse()">⇅ Đảo chiều</button>
+                    <button class="btn btn-outline-danger btn-sm w-50" onclick="app.clearHistory()">🗑 Xóa lịch sử</button>
+                </div>
+            </div>
+            <div class="ep-list"><div id="ep-container" class="ep-grid"></div></div>
+        </div>
+    </div>
+
+<script>
+// ============================================================================
+// KHU VỰC 1: DỮ LIỆU ONE PIECE (BỒ DÁN LẠI 1155 TẬP VÀO ĐÂY NHÉ)
+// ============================================================================
+const PHIM_1_DATA = `
+1|tap-1|https://embed18.streamc.xyz/embed.php?hash=c9e5230c3e65847df88fc05ea66cbbb6
+2|tap-2|https://embed18.streamc.xyz/embed.php?hash=836d175b655090eacd3a95f26c73f58f
+3|tap-3|https://embed18.streamc.xyz/embed.php?hash=c0bbc23d438f67d31a006b9bb3b08b56
+4|tap-4|https://embed18.streamc.xyz/embed.php?hash=49c70ff9389c24f8a008c69516027257
+5|tap-5|https://embed18.streamc.xyz/embed.php?hash=eeff8976324075fa0fa6817039ba9437
+6|tap-6|https://embed18.streamc.xyz/embed.php?hash=07df5404a06fa186c6d361fc7f6f58ee
+7|tap-7|https://embed18.streamc.xyz/embed.php?hash=96a1badc8456ba87980ab8e28bf55f2a
+8|tap-8|https://embed18.streamc.xyz/embed.php?hash=961a61dd16a57475ea8a23b4399ca693
+9|tap-9|https://embed18.streamc.xyz/embed.php?hash=406d29b5724e86867cbe04ea46fa0db9
+10|tap-10|https://embed18.streamc.xyz/embed.php?hash=4a4dfd3f28154d0d2e0f2e3c3c5d034e
+11|tap-11|https://embed18.streamc.xyz/embed.php?hash=26d8367ba93b17bab0631b5e117a3b33
+12|tap-12|https://embed18.streamc.xyz/embed.php?hash=d4cbfc18e095f5d9dbef41288d8c18a7
+13|tap-13|https://embed18.streamc.xyz/embed.php?hash=d9dcdba8d91bdede4f6acdd33d881c03
+14|tap-14|https://embed18.streamc.xyz/embed.php?hash=0d5a2351d53dbebfc5355d48f7d339c4
+15|tap-15|https://embed18.streamc.xyz/embed.php?hash=fb84e718e1efa1338c5c7df615edbc79
+16|tap-16|https://embed18.streamc.xyz/embed.php?hash=dd8ac0967fe900179af28a5544ae2a95
+17|tap-17|https://embed18.streamc.xyz/embed.php?hash=c9db416db5d899301d974334ededa89a
+18|tap-18|https://embed18.streamc.xyz/embed.php?hash=a009c331c547b06408b5b0734d6a1a2a
+19|tap-19|https://embed18.streamc.xyz/embed.php?hash=4057b5c67016377be5acf7fdba497acd
+20|tap-20|https://embed18.streamc.xyz/embed.php?hash=fe8c810a5d2937a288d271a509e7faa9
+21|tap-21|https://embed18.streamc.xyz/embed.php?hash=b8c745307a6ceb81a47fcf5081e62804
+22|tap-22|https://embed18.streamc.xyz/embed.php?hash=6440e9e06e404904fb2af008ba0abd0a
+23|tap-23|https://embed18.streamc.xyz/embed.php?hash=c749661692ed21450afb49c330a276dc
+24|tap-24|https://embed18.streamc.xyz/embed.php?hash=1d2cdff290465f51eb7c293ed984548a
+25|tap-25|https://embed18.streamc.xyz/embed.php?hash=2a8a515c8864cae59d20ed8967a343db
+26|tap-26|https://embed18.streamc.xyz/embed.php?hash=8007b52afe9fa9dfef9e4acd2fd72f64
+27|tap-27|https://embed18.streamc.xyz/embed.php?hash=a0699a19d70b350070dcbe3759a5ead3
+28|tap-28|https://embed18.streamc.xyz/embed.php?hash=d94fdd3e7caa7d40c1698203371e4b23
+29|tap-29|https://embed18.streamc.xyz/embed.php?hash=17a645b6906b6cd9d672a97201c154ae
+30|tap-30|https://embed18.streamc.xyz/embed.php?hash=293e7c03446f2937e5eb6a6ed60eeffb
+31|tap-31|https://embed18.streamc.xyz/embed.php?hash=a7a872073a4357107ec0678519796a2c
+32|tap-32|https://embed18.streamc.xyz/embed.php?hash=10794a13ee218cccd16b3627e8ecf756
+33|tap-33|https://embed18.streamc.xyz/embed.php?hash=4ad73fe97aa0fc5a7acc43c05e74ce22
+34|tap-34|https://embed15.streamc.xyz/embed.php?hash=d7725fd6a976760403a86cf7a3b9b809
+35|tap-35|https://embed15.streamc.xyz/embed.php?hash=84aae2db5db9214692f57d5109ee8ffe
+36|tap-36|https://embed15.streamc.xyz/embed.php?hash=292336681b5e5889c0918b49d5762b60
+37|tap-37|https://embed15.streamc.xyz/embed.php?hash=284504c4f344c7b64ac5b740d88d026b
+38|tap-38|https://embed15.streamc.xyz/embed.php?hash=97cb56dea946686e3b8cb19fa7f073d1
+39|tap-39|https://embed15.streamc.xyz/embed.php?hash=253946232e3e2e1330b5f79825e0361d
+40|tap-40|https://embed15.streamc.xyz/embed.php?hash=0a8826f03463e1ae6ceeda5740457dcf
+41|tap-41|https://embed15.streamc.xyz/embed.php?hash=676586da9ec4ebb2c5b64fe86d7c1d53
+42|tap-42|https://embed15.streamc.xyz/embed.php?hash=abc345201dfc7c517af8a163504d9af6
+43|tap-43|https://embed15.streamc.xyz/embed.php?hash=83b84611480917daef37e38d2a312fd8
+44|tap-44|https://embed15.streamc.xyz/embed.php?hash=5019c1b8599b3bbcc1b151719de2e369
+45|tap-45|https://embed15.streamc.xyz/embed.php?hash=ff7f72af8b45702d5e950afbc6fb2347
+46|tap-46|https://embed15.streamc.xyz/embed.php?hash=32a58650fea032138d437ae5a153492c
+47|tap-47|https://embed15.streamc.xyz/embed.php?hash=628405c11a9d564dc6656c2a48993c92
+48|tap-48|https://embed15.streamc.xyz/embed.php?hash=0202688e3b1f043a30eb7395514bc879
+49|tap-49|https://embed15.streamc.xyz/embed.php?hash=9f4fe53ddbd405bed3811e316a53c4e2
+50|tap-50|https://embed15.streamc.xyz/embed.php?hash=958f1ffb0c093611568f76a43a81e3b4
+51|tap-51|https://embed15.streamc.xyz/embed.php?hash=40da1f7491a44731d67ee61f6bf27fee
+52|tap-52|https://embed15.streamc.xyz/embed.php?hash=6f1139d4bd8e6815beecda3da0c85f53
+53|tap-53|https://embed15.streamc.xyz/embed.php?hash=38a32cee8d42ef566f017206f164efdc
+54|tap-54|https://embed15.streamc.xyz/embed.php?hash=34afe6f49c69363ea09dc85f3652fe3c
+55|tap-55|https://embed15.streamc.xyz/embed.php?hash=b7f8085715009defcd46dc250ebc9f97
+56|tap-56|https://embed15.streamc.xyz/embed.php?hash=2e6eb8aad5d70f4e0a8ba41d208e6ec6
+57|tap-57|https://embed15.streamc.xyz/embed.php?hash=8e892ef9c283846bc98641108decf5a2
+58|tap-58|https://embed15.streamc.xyz/embed.php?hash=ab5209543c626cda175f9d3064251209
+59|tap-59|https://embed15.streamc.xyz/embed.php?hash=bc5d7646a9da0cadb22bb71b4619ee0c
+60|tap-60|https://embed15.streamc.xyz/embed.php?hash=4950a613d3f2761c9ed6ed375751173b
+61|tap-61|https://embed15.streamc.xyz/embed.php?hash=f755fd904f23f60f1cbf474f1a120bc9
+62|tap-62|https://embed15.streamc.xyz/embed.php?hash=bf4dde441a36f570b6f28cfcb080788a
+63|tap-63|https://embed15.streamc.xyz/embed.php?hash=c54e1a96bdf6d8fcc371fb737c64ed6a
+64|tap-64|https://embed15.streamc.xyz/embed.php?hash=9e0465846616fa899c44bcb67521d254
+65|tap-65|https://embed15.streamc.xyz/embed.php?hash=e960f97c228a1f10945b53b6ffec8581
+66|tap-66|https://embed15.streamc.xyz/embed.php?hash=3ca0151d7a68c46d13731cd67a015d99
+67|tap-67|https://embed15.streamc.xyz/embed.php?hash=0dbf06401a41688d67ed0bc6f2baf858
+68|tap-68|https://embed14.streamc.xyz/embed.php?hash=2980026fc8e5a79ad503ec4ccc582447
+69|tap-69|https://embed14.streamc.xyz/embed.php?hash=f7eec64f8ca0fd513fd485e1c9826372
+70|tap-70|https://embed14.streamc.xyz/embed.php?hash=3c93be97f88bd815262a089198ab389b
+71|tap-71|https://embed14.streamc.xyz/embed.php?hash=d6f2f5309d087817be7cf5831bd24020
+72|tap-72|https://embed14.streamc.xyz/embed.php?hash=e4cf5029aa9931f4486c25451043be22
+73|tap-73|https://embed14.streamc.xyz/embed.php?hash=2c26b2c63badd400e2bac27fab7e4095
+74|tap-74|https://embed14.streamc.xyz/embed.php?hash=daf081a9029d19d622fd2ad57851920e
+75|tap-75|https://embed14.streamc.xyz/embed.php?hash=fbd64eb3e55c49e408a7f3151321160a
+76|tap-76|https://embed14.streamc.xyz/embed.php?hash=ca3bc7d9f674ca1da1bb58462752050d
+77|tap-77|https://embed14.streamc.xyz/embed.php?hash=efbe4cc69f5b572ecf5ff7279fcc3432
+78|tap-78|https://embed14.streamc.xyz/embed.php?hash=69f221f3ac33f15b3699efe0ad7cf010
+79|tap-79|https://embed14.streamc.xyz/embed.php?hash=1ab5d61b9ac7c4de34e9afbf8f45475e
+80|tap-80|https://embed14.streamc.xyz/embed.php?hash=79d3bd8921eb4fbedf64f8a044bf08c3
+81|tap-81|https://embed14.streamc.xyz/embed.php?hash=21903f2e8cfecac88777d6e340f39290
+82|tap-82|https://embed14.streamc.xyz/embed.php?hash=082aa3a17ec7f1a4ea689f40183b163c
+83|tap-83|https://embed14.streamc.xyz/embed.php?hash=608a6604eff0c20085f0405cffca451e
+84|tap-84|https://embed14.streamc.xyz/embed.php?hash=d7e4e81a70d0c34cb97d60bcce83be60
+85|tap-85|https://embed14.streamc.xyz/embed.php?hash=a17ad9a3a75f0a964e72228824902219
+86|tap-86|https://embed14.streamc.xyz/embed.php?hash=c4c909ac1cf4a200567a2723c1bab56e
+87|tap-87|https://embed14.streamc.xyz/embed.php?hash=d9d8b1bd29fe79c856a7a742917826ae
+88|tap-88|https://embed14.streamc.xyz/embed.php?hash=d496f786beae06c2064d4d65a4d8d8b9
+89|tap-89|https://embed14.streamc.xyz/embed.php?hash=caafd6dd629894d6fad630cb6b8ecc51
+90|tap-90|https://embed14.streamc.xyz/embed.php?hash=c0b3d6e46eff2a24c68dcdb7ec6437a2
+91|tap-91|https://embed14.streamc.xyz/embed.php?hash=8d19445b9c501c4917baa44d7f6d5221
+92|tap-92|https://embed14.streamc.xyz/embed.php?hash=7d63c17a5386a3a9e65b2b3154e7fd65
+93|tap-93|https://embed14.streamc.xyz/embed.php?hash=507355f021c2341a9da0a10a4ecd43a9
+94|tap-94|https://embed14.streamc.xyz/embed.php?hash=6495370467297cf48ad4f5644a1562ce
+95|tap-95|https://embed14.streamc.xyz/embed.php?hash=592f564f7688391edb8dd663066c3ce9
+96|tap-96|https://embed14.streamc.xyz/embed.php?hash=5a9406502bc463c430fe50a637943228
+97|tap-97|https://embed14.streamc.xyz/embed.php?hash=27e79a8f064658a04821d4f45f75689b
+98|tap-98|https://embed14.streamc.xyz/embed.php?hash=1bf1ec482412ea0f03d39149c1e603be
+99|tap-99|https://embed14.streamc.xyz/embed.php?hash=6751523f789fef20b5905445950e49d2
+100|tap-100|https://embed14.streamc.xyz/embed.php?hash=128907b4c38c2c85982f668904b084c3
+101|tap-101|https://embed18.streamc.xyz/embed.php?hash=332af965fd735494d60bc5a01c04a0df
+102|tap-102|https://embed18.streamc.xyz/embed.php?hash=bf5d99f09c6c87f821047951f17ebf9c
+103|tap-103|https://embed18.streamc.xyz/embed.php?hash=b30f031b19619347b28042ea0957145e
+104|tap-104|https://embed18.streamc.xyz/embed.php?hash=43468f82aa0a9af9adc21d54d3f643cc
+105|tap-105|https://embed18.streamc.xyz/embed.php?hash=9afa70b559f6a1cc09aab0b0883a5353
+106|tap-106|https://embed18.streamc.xyz/embed.php?hash=013b50c55a2ea58f07898564ef2f28fc
+107|tap-107|https://embed18.streamc.xyz/embed.php?hash=27647054569a5b5b0e02f78d171b0de2
+108|tap-108|https://embed18.streamc.xyz/embed.php?hash=73cf76be7c5369cadd11115bc57f58aa
+109|tap-109|https://embed18.streamc.xyz/embed.php?hash=c07b38f0157d77aa53e14295fe65d66d
+110|tap-110|https://embed18.streamc.xyz/embed.php?hash=ea407e83e9656bd9249475b1193c0d88
+111|tap-111|https://embed18.streamc.xyz/embed.php?hash=56edc32051947a736569117a25e48543
+112|tap-112|https://embed18.streamc.xyz/embed.php?hash=5eca16ba85087d830a4898cbd042252f
+113|tap-113|https://embed18.streamc.xyz/embed.php?hash=4fd9c800a0023412f06ddbdb6fea6415
+114|tap-114|https://embed18.streamc.xyz/embed.php?hash=e2c1cabe5e2708f5a2e83bd4e2e740a8
+115|tap-115|https://embed18.streamc.xyz/embed.php?hash=b240583ca2d204634254d7b804f59282
+116|tap-116|https://embed18.streamc.xyz/embed.php?hash=4eb4b553688270c255ae60021ced3d63
+117|tap-117|https://embed18.streamc.xyz/embed.php?hash=f2fd658821c407301e211b8d42530fd0
+118|tap-118|https://embed18.streamc.xyz/embed.php?hash=68b6d64dd0f64777863a4d7c5d1f59cd
+119|tap-119|https://embed18.streamc.xyz/embed.php?hash=5017e56f7b574be517f6fbb3ee5b603a
+120|tap-120|https://embed18.streamc.xyz/embed.php?hash=c5fea01bfb6381abf610eb77ca28a3ba
+121|tap-121|https://embed18.streamc.xyz/embed.php?hash=fc75bd5bbbebedd07f2da51ece2c884b
+122|tap-122|https://embed18.streamc.xyz/embed.php?hash=4a0ca99c76e7e294199e33e1ae1c888d
+123|tap-123|https://embed18.streamc.xyz/embed.php?hash=bd8b9d0f089bd95573681dc6a34cdcbc
+124|tap-124|https://embed18.streamc.xyz/embed.php?hash=64bd6b0fe58c6702fdb6662795962de5
+125|tap-125|https://embed18.streamc.xyz/embed.php?hash=9e1dcad24da1d6ff9d49473dd984bb76
+126|tap-126|https://embed18.streamc.xyz/embed.php?hash=f9bbe613d3515464d30941140ce8da26
+127|tap-127|https://embed18.streamc.xyz/embed.php?hash=0773ca4c33442aa65079ec1c679484dc
+128|tap-128|https://embed18.streamc.xyz/embed.php?hash=020c903e05f37776d1850a4ae1aad25a
+129|tap-129|https://embed18.streamc.xyz/embed.php?hash=5a58e7990507c2873a8ed6fe8c3830b7
+130|tap-130|https://embed18.streamc.xyz/embed.php?hash=31257484dea3a5f707492ca302fb95a0
+131|tap-131|https://embed15.streamc.xyz/embed.php?hash=8ba26f5f5efe653875d1373b35ec4e24
+132|tap-132|https://embed15.streamc.xyz/embed.php?hash=78de07589c1879691829ca4fceb0789a
+133|tap-133|https://embed15.streamc.xyz/embed.php?hash=16e07897c2d66c13d0eb11bae3f23d43
+134|tap-134|https://embed15.streamc.xyz/embed.php?hash=1a92a7e1e47177168997f449d2ba9cc9
+135|tap-135|https://embed15.streamc.xyz/embed.php?hash=0e7490272ec49eb6970337e8b308ba32
+136|tap-136|https://embed15.streamc.xyz/embed.php?hash=07c8ad821a130c0d727f5158e98c26f2
+137|tap-137|https://embed15.streamc.xyz/embed.php?hash=e79925aa45ca7332f8ed2be63aa38449
+138|tap-138|https://embed15.streamc.xyz/embed.php?hash=c66a3f6b0280e1e39a639520d0125d2c
+139|tap-139|https://embed15.streamc.xyz/embed.php?hash=052625089cc44b89ee8cf8ac389f4a9f
+140|tap-140|https://embed15.streamc.xyz/embed.php?hash=098dafeebb9af9f832bd7b83bf7b2033
+141|tap-141|https://embed15.streamc.xyz/embed.php?hash=da16f238719311081e8b106872beb258
+142|tap-142|https://embed15.streamc.xyz/embed.php?hash=556c327e82c0cd0db3ae2b7706ea9d18
+143|tap-143|https://embed15.streamc.xyz/embed.php?hash=b0d6d62735e2663d0b03102cd9d36a0e
+144|tap-144|https://embed15.streamc.xyz/embed.php?hash=9756d86c771453bb75f0c19dc890199d
+145|tap-145|https://embed15.streamc.xyz/embed.php?hash=3f65a110f39662ac9ab6b73e1222dcfb
+146|tap-146|https://embed15.streamc.xyz/embed.php?hash=a5bd4a14dd657c72303b886393791ed7
+147|tap-147|https://embed15.streamc.xyz/embed.php?hash=31d9a683040636507bda088888f195a4
+148|tap-148|https://embed15.streamc.xyz/embed.php?hash=9f9ee4c14e9354af0002b922ba719417
+149|tap-149|https://embed15.streamc.xyz/embed.php?hash=a2f28cac609fe53513b87d24debe11e1
+150|tap-150|https://embed15.streamc.xyz/embed.php?hash=f3a9d3c9678c536f78caf70b568fb7b9
+151|tap-151|https://embed15.streamc.xyz/embed.php?hash=da24599c089cd856694434d1e55c5280
+152|tap-152|https://embed15.streamc.xyz/embed.php?hash=f32cfd648f1583b09463378902d38a0a
+153|tap-153|https://embed15.streamc.xyz/embed.php?hash=ac7a4acf5516543b1f6aa9da8b79dc40
+154|tap-154|https://embed15.streamc.xyz/embed.php?hash=a3fb5c0cf64a76b35bb021d9b4ae5f21
+155|tap-155|https://embed15.streamc.xyz/embed.php?hash=3b6f14e83bd348aaeaacd08e95780005
+156|tap-156|https://embed15.streamc.xyz/embed.php?hash=df2cd3ef55a3d21a26ea9ab3be861923
+157|tap-157|https://embed15.streamc.xyz/embed.php?hash=92305b06ee0687c42085139ba58f8dad
+158|tap-158|https://embed15.streamc.xyz/embed.php?hash=8d5d52fd8ec7577adeb2bdad24858ea9
+159|tap-159|https://embed15.streamc.xyz/embed.php?hash=7d19545813b645f76f86772e7a9c1d37
+160|tap-160|https://embed15.streamc.xyz/embed.php?hash=42ff9941cd8a9eb990c6fba90e836bc2
+161|tap-161|https://embed15.streamc.xyz/embed.php?hash=bc355fc697fc7dedb95c9b63d2285d22
+162|tap-162|https://embed15.streamc.xyz/embed.php?hash=7e662f4086d2967d05798ef8ef980c21
+163|tap-163|https://embed15.streamc.xyz/embed.php?hash=77b0bc4752e9d766202f18a48cc1ba7a
+164|tap-164|https://embed15.streamc.xyz/embed.php?hash=2b0f1f137dd94bc32c10512d04f03dc2
+165|tap-165|https://embed15.streamc.xyz/embed.php?hash=84d4d70ca2cf7163c403ddbef6ab95f0
+166|tap-166|https://embed14.streamc.xyz/embed.php?hash=24217a8c42db72b7ae7f1777f7d0532a
+167|tap-167|https://embed14.streamc.xyz/embed.php?hash=0845b0da92d20584997eb45777768572
+168|tap-168|https://embed14.streamc.xyz/embed.php?hash=73a6844dba226cf80ce2ab6bbede12cb
+169|tap-169|https://embed14.streamc.xyz/embed.php?hash=85a428419c4412a8e2b783780b19d8f0
+170|tap-170|https://embed14.streamc.xyz/embed.php?hash=2973cea4585757bff91f54992f93dbea
+171|tap-171|https://embed14.streamc.xyz/embed.php?hash=b032e8a543b89d9b47bc5772ca5571cf
+172|tap-172|https://embed14.streamc.xyz/embed.php?hash=0f11c587db4b977cc5171d25b835690c
+173|tap-173|https://embed14.streamc.xyz/embed.php?hash=9e13da1e0d91cf0e301be165aa10329a
+174|tap-174|https://embed14.streamc.xyz/embed.php?hash=bbaeab806a5cb48451331955ee7b66eb
+175|tap-175|https://embed14.streamc.xyz/embed.php?hash=ea090842ee343c3742c41c1f459c6871
+176|tap-176|https://embed14.streamc.xyz/embed.php?hash=57178f0b95df1c0bd8e759d0a51b3a86
+177|tap-177|https://embed14.streamc.xyz/embed.php?hash=6fef84176193adbe4c71ec79d3be5456
+178|tap-178|https://embed14.streamc.xyz/embed.php?hash=ad14c5a2c4e9167050f07ee13dc2494f
+179|tap-179|https://embed14.streamc.xyz/embed.php?hash=183c43e50ab2e934255eb3dde767d162
+180|tap-180|https://embed14.streamc.xyz/embed.php?hash=7581ad8542318ad8e4c304e297fc0690
+181|tap-181|https://embed14.streamc.xyz/embed.php?hash=21910c90abaf23457b49368527999c30
+182|tap-182|https://embed14.streamc.xyz/embed.php?hash=d9f8442e4fdb324c47a9f63c75112dc1
+183|tap-183|https://embed14.streamc.xyz/embed.php?hash=4751893e67201054eb9afab2cc65bc9d
+184|tap-184|https://embed14.streamc.xyz/embed.php?hash=848dff72b357c5533d86aab0cab8664a
+185|tap-185|https://embed14.streamc.xyz/embed.php?hash=1814dada9bcf7801f9944ea03ff8c18c
+186|tap-186|https://embed14.streamc.xyz/embed.php?hash=6fc30eb07c23eb9201165fedde4c86fc
+187|tap-187|https://embed14.streamc.xyz/embed.php?hash=7fbac804447a26231f1837bf57126504
+188|tap-188|https://embed14.streamc.xyz/embed.php?hash=eb9932228639f8d56faad6463ced3929
+189|tap-189|https://embed14.streamc.xyz/embed.php?hash=3546250e5dcbac5506f9c2d114b74c5d
+190|tap-190|https://embed14.streamc.xyz/embed.php?hash=961d6252247c83e6f202638066734cbf
+191|tap-191|https://embed14.streamc.xyz/embed.php?hash=2f21c8cd1756865a1e5cccc124684e66
+192|tap-192|https://embed14.streamc.xyz/embed.php?hash=4423cd5e0906bc80dcc2bc30ef484334
+193|tap-193|https://embed14.streamc.xyz/embed.php?hash=84a221b2437bcacdf9319c713027b78c
+194|tap-194|https://embed14.streamc.xyz/embed.php?hash=efb31338e5ab6a9f58601321c2ed9523
+195|tap-195|https://embed14.streamc.xyz/embed.php?hash=a5031946c4442bdec97f0a26ba5e8c6d
+196|tap-196|https://embed14.streamc.xyz/embed.php?hash=0df04bc75a6a7677d4905fa1fc91817d
+197|tap-197|https://embed14.streamc.xyz/embed.php?hash=895a25bcb302e34342ce730b298dacb8
+198|tap-198|https://embed14.streamc.xyz/embed.php?hash=11077ea8ce86d56748874a086fd776e1
+199|tap-199|https://embed14.streamc.xyz/embed.php?hash=478beb3ff020f80142edfe031b730c8e
+200|tap-200|https://embed14.streamc.xyz/embed.php?hash=cf5bb0601845874689ad1fc01a7f6a96
+201|tap-201|https://embed13.streamc.xyz/embed.php?hash=f801102f5dc3fe924f5ad97011723c05
+202|tap-202|https://embed13.streamc.xyz/embed.php?hash=ef7453c1c4e25dd732d549eab91e2c98
+203|tap-203|https://embed13.streamc.xyz/embed.php?hash=6dde21e33b7f5df38df46e71fae77d1f
+204|tap-204|https://embed13.streamc.xyz/embed.php?hash=ab05a80633c7b4f8e2339b59d8093e75
+205|tap-205|https://embed13.streamc.xyz/embed.php?hash=977002ab8c6c869e428aa145ef10f711
+206|tap-206|https://embed13.streamc.xyz/embed.php?hash=bc8714a0c5e6d8854c3c7ad2afeb04a9
+207|tap-207|https://embed13.streamc.xyz/embed.php?hash=ad10c68a249a24ca6f63f296ca9f1748
+208|tap-208|https://embed13.streamc.xyz/embed.php?hash=013adb4976ce766582b81a7d4c6de85c
+209|tap-209|https://embed13.streamc.xyz/embed.php?hash=1ffc9447794ede9c2a4aae1cedb1b53b
+210|tap-210|https://embed13.streamc.xyz/embed.php?hash=1b66758a7e11fed9780acf91ec2998f9
+211|tap-211|https://embed13.streamc.xyz/embed.php?hash=16f1fbc740595fe4c27c9206366f4090
+212|tap-212|https://embed13.streamc.xyz/embed.php?hash=b3bff7e993774fd30dd91b2715734106
+213|tap-213|https://embed13.streamc.xyz/embed.php?hash=4097a64b8e908259ee6e627466d71ffb
+214|tap-214|https://embed13.streamc.xyz/embed.php?hash=dea1c5fe99780534ba142c2cfc85f578
+215|tap-215|https://embed13.streamc.xyz/embed.php?hash=94b731e8e3a20cbf3faa04e68bc830b6
+216|tap-216|https://embed13.streamc.xyz/embed.php?hash=6f4bbb60a4b71b79fa2414f39cfcb47f
+217|tap-217|https://embed13.streamc.xyz/embed.php?hash=baee65b931611f69ec67843cfe797d68
+218|tap-218|https://embed13.streamc.xyz/embed.php?hash=185f55a6ddb108160bdc954b3bfd7e32
+219|tap-219|https://embed13.streamc.xyz/embed.php?hash=027bb194bcb5fc877d2677b203178598
+220|tap-220|https://embed13.streamc.xyz/embed.php?hash=0c0374ead7e029ca054daaa419f7a4f4
+221|tap-221|https://embed13.streamc.xyz/embed.php?hash=a0571468b1b2888c9ad76962006d6c85
+222|tap-222|https://embed13.streamc.xyz/embed.php?hash=88c0f11cdc550c458a9b5be93ba86877
+223|tap-223|https://embed13.streamc.xyz/embed.php?hash=7e3ec0d3bd26c339a594cfd60262baaa
+224|tap-224|https://embed13.streamc.xyz/embed.php?hash=ed0b63cb7f2927e78ab3890816731cc2
+225|tap-225|https://embed13.streamc.xyz/embed.php?hash=0529efd518c99d022992633dacb286a7
+226|tap-226|https://embed13.streamc.xyz/embed.php?hash=4210eb2bc2e5389d8dd98f414b212b18
+227|tap-227|https://embed13.streamc.xyz/embed.php?hash=fdad75ee104c044849b036222d24fe94
+228|tap-228|https://embed13.streamc.xyz/embed.php?hash=acef0d2e6368302d1ee2c4023ace94a9
+229|tap-229|https://embed13.streamc.xyz/embed.php?hash=eab5675b3784c5fa881e5586ed52cb11
+230|tap-230|https://embed13.streamc.xyz/embed.php?hash=edd9416d3a9b162b4d22d854eb84778c
+231|tap-231|https://embed13.streamc.xyz/embed.php?hash=40b386c8c6978345fa425dbbd149f784
+232|tap-232|https://embed13.streamc.xyz/embed.php?hash=ee6b4ce65a230eb05cd27ed74db93d59
+233|tap-233|https://embed11.streamc.xyz/embed.php?hash=3ea29fd27cad74b2970f95a300bac08a
+234|tap-234|https://embed11.streamc.xyz/embed.php?hash=86a30290896478638954f5be1c37de00
+235|tap-235|https://embed11.streamc.xyz/embed.php?hash=e77d5f9469c516b57ee354fac02383da
+236|tap-236|https://embed11.streamc.xyz/embed.php?hash=7a7637d8ea8e00b5b9e6c08709a011cb
+237|tap-237|https://embed11.streamc.xyz/embed.php?hash=90f635abb0a63a740ab86d0ae03deea6
+238|tap-238|https://embed11.streamc.xyz/embed.php?hash=eb4222f2c4b6868161f9fd6dc6a2fff3
+239|tap-239|https://embed11.streamc.xyz/embed.php?hash=5bcaacfd8fa3775bece3e0ba72d045a8
+240|tap-240|https://embed11.streamc.xyz/embed.php?hash=d990b2dda77c4798ec00698bdd6a867c
+241|tap-241|https://embed11.streamc.xyz/embed.php?hash=c91e4fac5fcaf5e8b936f60d138032b2
+242|tap-242|https://embed11.streamc.xyz/embed.php?hash=603031271c402f3a859fcde087def66e
+243|tap-243|https://embed11.streamc.xyz/embed.php?hash=ed5b30ea7aa02563f7dc21b0697fa5b8
+244|tap-244|https://embed11.streamc.xyz/embed.php?hash=123f4e6634ab44f9466201b9cb30c685
+245|tap-245|https://embed11.streamc.xyz/embed.php?hash=cd0e18a1679f1da9fad38982da47d50d
+246|tap-246|https://embed11.streamc.xyz/embed.php?hash=95730156ffa428be28b1b8e65883ad2e
+247|tap-247|https://embed11.streamc.xyz/embed.php?hash=bcb034c97795cf3a36993a8f5fb7f87f
+248|tap-248|https://embed11.streamc.xyz/embed.php?hash=71914ac00516fb067d44186c637a3840
+249|tap-249|https://embed11.streamc.xyz/embed.php?hash=71d294fc52c50fcbfecd76df59b43690
+250|tap-250|https://embed11.streamc.xyz/embed.php?hash=a1cc505a5532302e122152819d93af4b
+251|tap-251|https://embed11.streamc.xyz/embed.php?hash=bc811188aa3567111216b723361acb37
+252|tap-252|https://embed11.streamc.xyz/embed.php?hash=9ba5383e6aa9c16d5dc169e5a7bfda30
+253|tap-253|https://embed11.streamc.xyz/embed.php?hash=8175f0ecf5d7f7d7418e30f5bdd20cf5
+254|tap-254|https://embed11.streamc.xyz/embed.php?hash=50052176ac349ab92a233da662801051
+255|tap-255|https://embed11.streamc.xyz/embed.php?hash=771301055f55cab7c894305ce6829da2
+256|tap-256|https://embed11.streamc.xyz/embed.php?hash=29e5173b1ab45f5b7dac842d3d8473de
+257|tap-257|https://embed11.streamc.xyz/embed.php?hash=c8978d9601787388b3d6aaf8ba555d2c
+258|tap-258|https://embed11.streamc.xyz/embed.php?hash=1c29a234010613a0bcafdedca73ae1e5
+259|tap-259|https://embed11.streamc.xyz/embed.php?hash=449d2d270ec5ef57128a25638cf565c7
+260|tap-260|https://embed11.streamc.xyz/embed.php?hash=5aa1cfbebeb683332ecad899f2203232
+261|tap-261|https://embed11.streamc.xyz/embed.php?hash=6bcb6ee351a7ed6cbb21c52a7b9ed818
+262|tap-262|https://embed11.streamc.xyz/embed.php?hash=b9c153da9eef7e66a5b8e64a74b05e12
+263|tap-263|https://embed11.streamc.xyz/embed.php?hash=002b5e8924bff3f15bf6ed2a600b9457
+264|tap-264|https://embed11.streamc.xyz/embed.php?hash=032c64eb54f5eba12a143ad0a348ba14
+265|tap-265|https://embed11.streamc.xyz/embed.php?hash=99de8e63db26bc99b844e1e68a194a6e
+266|tap-266|https://embed11.streamc.xyz/embed.php?hash=c0dd7a2d084b9d8f82ea757e1b5cb266
+267|tap-267|https://embed10.streamc.xyz/embed.php?hash=c1bdfd7412a60f2eb5747c57ab2d2a8e
+268|tap-268|https://embed10.streamc.xyz/embed.php?hash=753d8c7c4627104b1c4e5b4b78d4fcfd
+269|tap-269|https://embed10.streamc.xyz/embed.php?hash=3dd052d7e3f5d10bf523978e21ef4ed7
+270|tap-270|https://embed10.streamc.xyz/embed.php?hash=2c310a83596903cabe8ccce5f5653316
+271|tap-271|https://embed10.streamc.xyz/embed.php?hash=3b774bc9b9e2b4f1b569190720c6b321
+272|tap-272|https://embed10.streamc.xyz/embed.php?hash=f67c4bdd6f7e559607403b7cf3db35f8
+273|tap-273|https://embed10.streamc.xyz/embed.php?hash=a433f2c755756395da94c7391c23da7c
+274|tap-274|https://embed10.streamc.xyz/embed.php?hash=6983395cc0e8ae64ef5ba5e16714a226
+275|tap-275|https://embed10.streamc.xyz/embed.php?hash=16aa67f1e42be26558f41bbcd2906e1f
+276|tap-276|https://embed10.streamc.xyz/embed.php?hash=b8464b8e1e4a56f514f768e0eafcfa9c
+277|tap-277|https://embed10.streamc.xyz/embed.php?hash=c9ca443e6d0231b5da6e354440356fb1
+278|tap-278|https://embed10.streamc.xyz/embed.php?hash=510f19ea97136539d7e74dec1cc40aab
+279|tap-279|https://embed10.streamc.xyz/embed.php?hash=f07d288d5488b6ae962a772417a25dbf
+280|tap-280|https://embed10.streamc.xyz/embed.php?hash=17ce1838e4e319e271927d59c6809715
+281|tap-281|https://embed10.streamc.xyz/embed.php?hash=fe95e47e84642f6e5fb06f170d2664ea
+282|tap-282|https://embed10.streamc.xyz/embed.php?hash=4ed65b5ead2e949583a03acdbf807013
+283|tap-283|https://embed10.streamc.xyz/embed.php?hash=f3b9be31fe412f577f399edb4859e372
+284|tap-284|https://embed10.streamc.xyz/embed.php?hash=52a5418b61781fe83c17821edf9cbc58
+285|tap-285|https://embed10.streamc.xyz/embed.php?hash=cc70c0b1b5f0fb9535bec9797ddef6b0
+286|tap-286|https://embed10.streamc.xyz/embed.php?hash=fd365395ff50db73bdb2ccf45ef40ac9
+287|tap-287|https://embed10.streamc.xyz/embed.php?hash=8d776cccdb146a8a89e179c1ccbb4494
+288|tap-288|https://embed10.streamc.xyz/embed.php?hash=7bb1492c1f42a9d6772f4e831a5a4c79
+289|tap-289|https://embed10.streamc.xyz/embed.php?hash=5cefd3099e104dd0e60a9d0acede5fe7
+290|tap-290|https://embed10.streamc.xyz/embed.php?hash=dcbf711ae016fed7f18dbd2e1f1ff0aa
+291|tap-291|https://embed10.streamc.xyz/embed.php?hash=0165a68ef7bf821a29e21504013bb965
+292|tap-292|https://embed10.streamc.xyz/embed.php?hash=8f5cd04672bdd05e3a0fb630b63eaa13
+293|tap-293|https://embed10.streamc.xyz/embed.php?hash=d5d15aa537618a6481e59a0e4e2028f1
+294|tap-294|https://embed10.streamc.xyz/embed.php?hash=94b6874b024aa7f485e4b99efd9d638b
+295|tap-295|https://embed10.streamc.xyz/embed.php?hash=0eed136bbaf7801cefeeb1acdc42b43e
+296|tap-296|https://embed10.streamc.xyz/embed.php?hash=8ccbed68286341877a2f6c29d872b2c0
+297|tap-297|https://embed10.streamc.xyz/embed.php?hash=0e567645840b75e0a6ecba5722dfd1f8
+298|tap-298|https://embed10.streamc.xyz/embed.php?hash=140a4aab57620ae6bf3721d150318cd1
+299|tap-299|https://embed10.streamc.xyz/embed.php?hash=03bf3cba74fc709fd884308c0ae216cc
+300|tap-300|https://embed10.streamc.xyz/embed.php?hash=492c5747b728b6015508c76e44354f6f
+301|tap-301|https://embed10.streamc.xyz/embed.php?hash=f7ce00b4682b1584ef75dcf7a6a5c4de
+302|tap-302|https://embed10.streamc.xyz/embed.php?hash=f358d9ff51d7fa32dea6b83bb4ad5999
+303|tap-303|https://embed10.streamc.xyz/embed.php?hash=75b756054dad392a9793c4e0ec4d635e
+304|tap-304|https://embed10.streamc.xyz/embed.php?hash=701429e0927f84fccd9b2753655a1f2c
+305|tap-305|https://embed10.streamc.xyz/embed.php?hash=6fcabfe0f8f8dfbd1da738b089f88e76
+306|tap-306|https://embed10.streamc.xyz/embed.php?hash=63856ba858d3bdd44340d41f49687937
+307|tap-307|https://embed10.streamc.xyz/embed.php?hash=8a8ccfab11225b8cc36dc17a872dc97f
+308|tap-308|https://embed10.streamc.xyz/embed.php?hash=b7303ba5c10b3c4e4e1377e51970bc57
+309|tap-309|https://embed10.streamc.xyz/embed.php?hash=408f16eb974a00ee678b7f13c0301ba7
+310|tap-310|https://embed10.streamc.xyz/embed.php?hash=5b0e80da4c33dff46f1bef75ead593e4
+311|tap-311|https://embed10.streamc.xyz/embed.php?hash=65d28003529038aedd082dafdb68e39d
+312|tap-312|https://embed10.streamc.xyz/embed.php?hash=f75bb468b534cf8a6146151e811c9095
+313|tap-313|https://embed10.streamc.xyz/embed.php?hash=f21ebbafa433e321e12ec65547c72ed0
+314|tap-314|https://embed10.streamc.xyz/embed.php?hash=48a4fc2d81d664d5ce42632539803b1f
+315|tap-315|https://embed10.streamc.xyz/embed.php?hash=804bc681b93bbf60284319060679700c
+316|tap-316|https://embed10.streamc.xyz/embed.php?hash=b880b690761ca70dc2d613a11626720a
+317|tap-317|https://embed10.streamc.xyz/embed.php?hash=453135864afb1df29b3a8c129ac9ed03
+318|tap-318|https://embed10.streamc.xyz/embed.php?hash=8442c6f862cf3e41d5ffecce0bee377b
+319|tap-319|https://embed10.streamc.xyz/embed.php?hash=3b759ca6b61fc76c2f08c3fc50b4d54a
+320|tap-320|https://embed10.streamc.xyz/embed.php?hash=70f593a0b8d2bd0d1fdb262db13b5e85
+321|tap-321|https://embed10.streamc.xyz/embed.php?hash=e9f7783ae3d5e362ea37672e803f0b00
+322|tap-322|https://embed10.streamc.xyz/embed.php?hash=9e642aea4c770963302d26602fcffb44
+323|tap-323|https://embed10.streamc.xyz/embed.php?hash=336b02a12667247407f7c91463e372b4
+324|tap-324|https://embed10.streamc.xyz/embed.php?hash=91c9f21b8a459402a8fd6e8b0072f29e
+325|tap-325|https://embed10.streamc.xyz/embed.php?hash=b952511980d56843150ea5ac9e49b3a6
+326|tap-326|https://embed10.streamc.xyz/embed.php?hash=d625b34d91fa383673d59add49a6bf2a
+327|tap-327|https://embed10.streamc.xyz/embed.php?hash=5e6dd0467fff2d1d69695ce190be78d1
+328|tap-328|https://embed10.streamc.xyz/embed.php?hash=6722598ea05e9ed6da15a1cbb172b4e4
+329|tap-329|https://embed10.streamc.xyz/embed.php?hash=55020e05fd45cd4742b8d76080b1b694
+330|tap-330|https://embed10.streamc.xyz/embed.php?hash=68645be3ab56368ad892366bd8bcd9f5
+331|tap-331|https://embed10.streamc.xyz/embed.php?hash=1de6ccb390750c36607bca67cb0e00a2
+332|tap-332|https://embed10.streamc.xyz/embed.php?hash=355fe91b8ac3ca3efbe2a100dd9365c9
+333|tap-333|https://embed10.streamc.xyz/embed.php?hash=eda0d5621c58a6c16c48e8007f327749
+334|tap-334|https://embed10.streamc.xyz/embed.php?hash=4ccdb1f131c4a6ffa0f5900fcd32b163
+335|tap-335|https://embed11.streamc.xyz/embed.php?hash=6a783f561162c0538f604baf3a5b9c03
+336|tap-336|https://embed11.streamc.xyz/embed.php?hash=7240c511851ce0ae12b981d69e0e45c1
+337|tap-337|https://embed11.streamc.xyz/embed.php?hash=7c7f6ceec2d336922fe2cadb66d32bd5
+338|tap-338|https://embed11.streamc.xyz/embed.php?hash=b1c8ecf29b6fac6fbd46db9bb7ec3e08
+339|tap-339|https://embed11.streamc.xyz/embed.php?hash=0ba6349eede5f01865dd98b283faacd7
+340|tap-340|https://embed11.streamc.xyz/embed.php?hash=838fb386f2df8f9c07c238d97e618968
+341|tap-341|https://embed11.streamc.xyz/embed.php?hash=473bcf7360bd53dcbe09082a1c80e135
+342|tap-342|https://embed11.streamc.xyz/embed.php?hash=ce95030569b4c13c0373afa3a3418f8d
+343|tap-343|https://embed11.streamc.xyz/embed.php?hash=1440b161a3b35a309a2c38c2cb64fda2
+344|tap-344|https://embed11.streamc.xyz/embed.php?hash=a26fb70a28a9f222559efe2b587ec430
+345|tap-345|https://embed11.streamc.xyz/embed.php?hash=cc9bb8535ccd064c5fb0bf3f414ae847
+346|tap-346|https://embed11.streamc.xyz/embed.php?hash=83a7bc95fe0f23bd1c95f9115f7eb51f
+347|tap-347|https://embed11.streamc.xyz/embed.php?hash=95ca7dfedd0fefb51e1bdbf4df66cd70
+348|tap-348|https://embed11.streamc.xyz/embed.php?hash=990f8304453e3c4f0a406bfada436899
+349|tap-349|https://embed11.streamc.xyz/embed.php?hash=ee56add12bd92e4817a2481514c3cbcc
+350|tap-350|https://embed11.streamc.xyz/embed.php?hash=f9d41db04a86c4344b7a309dd14adb5d
+351|tap-351|https://embed11.streamc.xyz/embed.php?hash=b4b461c7e992079cc9169aa1400d7901
+352|tap-352|https://embed11.streamc.xyz/embed.php?hash=cb6c312a245c64fd41ea2332462a779a
+353|tap-353|https://embed11.streamc.xyz/embed.php?hash=70b842fbfefb4cae41aa6aab21b30516
+354|tap-354|https://embed11.streamc.xyz/embed.php?hash=fc885e2c70b72ff1c268d25f50699764
+355|tap-355|https://embed11.streamc.xyz/embed.php?hash=1b857d5fc54ecc3d89643cf6784666fd
+356|tap-356|https://embed11.streamc.xyz/embed.php?hash=7a8c608317f261ff83fc26ea80ecc771
+357|tap-357|https://embed11.streamc.xyz/embed.php?hash=349fe0f483630c9a0e6545678a5273f4
+358|tap-358|https://embed11.streamc.xyz/embed.php?hash=08f560d3e1dda77f0e0a253975b2d166
+359|tap-359|https://embed11.streamc.xyz/embed.php?hash=0a650ec76b6257c96e6a550bebd26a8c
+360|tap-360|https://embed11.streamc.xyz/embed.php?hash=74a4188cbfd668b4ab6f062ae984ca12
+361|tap-361|https://embed11.streamc.xyz/embed.php?hash=aa9e6b52d61e32f75ad35666f3bd597d
+362|tap-362|https://embed11.streamc.xyz/embed.php?hash=3687661d3076fcc2de086db3d592fce8
+363|tap-363|https://embed11.streamc.xyz/embed.php?hash=5e926c1b3faf56ec219d3b62c7005f8f
+364|tap-364|https://embed11.streamc.xyz/embed.php?hash=221382d0aae90faf4339f30291bd2abb
+365|tap-365|https://embed11.streamc.xyz/embed.php?hash=347e77632b35f341e497486023e69165
+366|tap-366|https://embed11.streamc.xyz/embed.php?hash=f2b501ca095a1c095be176358bf4d9fb
+367|tap-367|https://embed11.streamc.xyz/embed.php?hash=59fc9edd94fb31765184cf1b91decd1f
+368|tap-368|https://embed11.streamc.xyz/embed.php?hash=f4f08599938805a1439427b7367abe13
+369|tap-369|https://embed13.streamc.xyz/embed.php?hash=e50b9241db33f3fbf1a7200ae24330e3
+370|tap-370|https://embed13.streamc.xyz/embed.php?hash=b4763855367a9c26baa55832df5d38cf
+371|tap-371|https://embed13.streamc.xyz/embed.php?hash=6829abdf73f956350e8aba1b81604e45
+372|tap-372|https://embed13.streamc.xyz/embed.php?hash=7bde8a108c4403714ad390deb701be34
+373|tap-373|https://embed13.streamc.xyz/embed.php?hash=4349c0046238d79fd76c86b79df739cb
+374|tap-374|https://embed13.streamc.xyz/embed.php?hash=e19dbe67796ab223a8411dc0a26a4adb
+375|tap-375|https://embed13.streamc.xyz/embed.php?hash=48dbd44cb1e8ee3a3b28d8778fc20d77
+376|tap-376|https://embed13.streamc.xyz/embed.php?hash=e44150658a6d95af1cc3abce71514e01
+377|tap-377|https://embed13.streamc.xyz/embed.php?hash=d8cc5bfd3fd8ca06f4bb93d0d6ea7ee3
+378|tap-378|https://embed13.streamc.xyz/embed.php?hash=12836639b574a0752a70dd0aa97e715f
+379|tap-379|https://embed13.streamc.xyz/embed.php?hash=ed56e93c589dc6e1f094c44f108cdcb5
+380|tap-380|https://embed13.streamc.xyz/embed.php?hash=c391fcbeac3e827bf0f95dcb06256e5a
+381|tap-381|https://embed13.streamc.xyz/embed.php?hash=17768a63a8af82d8a9d42f361ee3b784
+382|tap-382|https://embed13.streamc.xyz/embed.php?hash=8ff39785f9329be47f1e63521ab6c25a
+383|tap-383|https://embed13.streamc.xyz/embed.php?hash=bc09a0c6511476c44a741271ee7c9f87
+384|tap-384|https://embed13.streamc.xyz/embed.php?hash=fbc5ba4b1971c45893b9b8792ccd2f03
+385|tap-385|https://embed13.streamc.xyz/embed.php?hash=62ed6c4a03bbc4324666ba4d3d7eb8de
+386|tap-386|https://embed13.streamc.xyz/embed.php?hash=0f59d9c75414c786a54089bdeaa8378a
+387|tap-387|https://embed13.streamc.xyz/embed.php?hash=7de54a263e83b8961b37bd4cf67b23e1
+388|tap-388|https://embed13.streamc.xyz/embed.php?hash=e2d3c91f5b02fb9444c605e813e77839
+389|tap-389|https://embed13.streamc.xyz/embed.php?hash=fc6d4a596e025c8dbd4a7a4dcc8d6751
+390|tap-390|https://embed13.streamc.xyz/embed.php?hash=aa1328f3935985a1e053aff276b3182b
+391|tap-391|https://embed13.streamc.xyz/embed.php?hash=ebe490ab9e6fc2e1e6dee9d9bb42696c
+392|tap-392|https://embed13.streamc.xyz/embed.php?hash=2136f92cd87b3065e2ed00dc9d740f9d
+393|tap-393|https://embed13.streamc.xyz/embed.php?hash=bfb246d8957debd5b584c744066ba59a
+394|tap-394|https://embed13.streamc.xyz/embed.php?hash=821b1221d738a1b5d96e0e3d4741dd3c
+395|tap-395|https://embed13.streamc.xyz/embed.php?hash=0446f441290011b1edafd4679c26026b
+396|tap-396|https://embed13.streamc.xyz/embed.php?hash=0daf60c155a3676510f6d1ba2747d3f0
+397|tap-397|https://embed13.streamc.xyz/embed.php?hash=255738ce145c6f7e0f45dc0c445df7ae
+398|tap-398|https://embed13.streamc.xyz/embed.php?hash=e4f27c207d04140ec69d952072c8b515
+399|tap-399|https://embed13.streamc.xyz/embed.php?hash=b320a916a76149450b6b616f15111ca0
+400|tap-400|https://embed13.streamc.xyz/embed.php?hash=14092409a19a54a30b67762e6387177c
+401|tap-401|https://embed13.streamc.xyz/embed.php?hash=fe7c7395334d16d5b8a29ac551b138d3
+402|tap-402|https://embed13.streamc.xyz/embed.php?hash=26c72c871f8b04f3452d5798bd8cab2c
+403|tap-403|https://embed13.streamc.xyz/embed.php?hash=d1303b9065ebefab883fb20b3d233b3c
+404|tap-404|https://embed13.streamc.xyz/embed.php?hash=284ad25b1f94ce50bbec77f649ebb61f
+405|tap-405|https://embed13.streamc.xyz/embed.php?hash=03f18a0a004e45f2a8d2c7cab19503bc
+406|tap-406|https://embed13.streamc.xyz/embed.php?hash=4a9528b462fe31523fa74c2f48e3732c
+407|tap-407|https://embed13.streamc.xyz/embed.php?hash=32c29552f682823f38dbef2002e97158
+408|tap-408|https://embed13.streamc.xyz/embed.php?hash=784b12f14ded3a0f73b43799add45702
+409|tap-409|https://embed13.streamc.xyz/embed.php?hash=703c1268e505799002cf119c63b565c5
+410|tap-410|https://embed13.streamc.xyz/embed.php?hash=7c71e81e483f3748a4289b8b9bfcc5ef
+411|tap-411|https://embed13.streamc.xyz/embed.php?hash=11456d24c372be18144fe8e1fc045db8
+412|tap-412|https://embed13.streamc.xyz/embed.php?hash=f9ff75b7be56cbd5d7f5071e87c5d3da
+413|tap-413|https://embed13.streamc.xyz/embed.php?hash=838d440cd01d446b4123af8634f4d8b9
+414|tap-414|https://embed13.streamc.xyz/embed.php?hash=65dae745ff635bee206d832804e0516e
+415|tap-415|https://embed13.streamc.xyz/embed.php?hash=f38893c7ee29e252818f76c73f964656
+416|tap-416|https://embed13.streamc.xyz/embed.php?hash=aececbf5b6ec6c49d4621d992e06fd9d
+417|tap-417|https://embed13.streamc.xyz/embed.php?hash=0362592e5fc7cbe0fe19bf8cc5417860
+418|tap-418|https://embed13.streamc.xyz/embed.php?hash=7e7c2866a74d0d89a7221cd0212c1930
+419|tap-419|https://embed13.streamc.xyz/embed.php?hash=d22b7db8618e6d9fec211e0ccc76e4b0
+420|tap-420|https://embed13.streamc.xyz/embed.php?hash=1b0c4d8976812aabb5e0361682d617b1
+421|tap-421|https://embed13.streamc.xyz/embed.php?hash=a23c47acc0e2c71360fb42b3541aed1b
+422|tap-422|https://embed13.streamc.xyz/embed.php?hash=c9f339e60fdaece8ccb38c7af2814758
+423|tap-423|https://embed13.streamc.xyz/embed.php?hash=e16b988fcd1eea2305ef92998ec02a22
+424|tap-424|https://embed13.streamc.xyz/embed.php?hash=c340290d20f987f6013a90516e66efd0
+425|tap-425|https://embed13.streamc.xyz/embed.php?hash=2d6532d59dacfff852ccf402d580a3d1
+426|tap-426|https://embed13.streamc.xyz/embed.php?hash=316ca25cb366e5832c9ce2423ab63431
+427|tap-427|https://embed13.streamc.xyz/embed.php?hash=b057a96e618b9dd4e490c41bb6b33657
+428|tap-428|https://embed13.streamc.xyz/embed.php?hash=73966bc143f95dd438e0de6fd0f92b2f
+429|tap-429|https://embed13.streamc.xyz/embed.php?hash=0f18482de06da1779d6480fbf370f271
+430|tap-430|https://embed13.streamc.xyz/embed.php?hash=b858a105497ee41ad7736c4752034b95
+431|tap-431|https://embed13.streamc.xyz/embed.php?hash=3c0053c14544bb17ccbf930dbee5aae1
+432|tap-432|https://embed13.streamc.xyz/embed.php?hash=cee188eb3a4ba9a3a1b0d6bcb19c9015
+433|tap-433|https://embed13.streamc.xyz/embed.php?hash=8f9675697fbf92e1dbecfc19ea15c5fe
+434|tap-434|https://embed13.streamc.xyz/embed.php?hash=0e845e0999f86b97976b565f24621f4e
+435|tap-435|https://embed13.streamc.xyz/embed.php?hash=b24b3f8a2d800ca677a6f6de27590e6c
+436|tap-436|https://embed13.streamc.xyz/embed.php?hash=88d41f10f9dfadfb1c87ba6222fad733
+437|tap-437|https://embed13.streamc.xyz/embed.php?hash=04a357604e783ef44636d16bc6abc497
+438|tap-438|https://embed13.streamc.xyz/embed.php?hash=2767ece25dbb41fc1e95eff7df8399ed
+439|tap-439|https://embed13.streamc.xyz/embed.php?hash=06a23cfb23cadfc4d6c98941a7d2fe20
+440|tap-440|https://embed13.streamc.xyz/embed.php?hash=c2da0cd02b984b7c659937236c60c878
+441|tap-441|https://embed13.streamc.xyz/embed.php?hash=9e8796ead4a2141b3f636fb1c83168af
+442|tap-442|https://embed13.streamc.xyz/embed.php?hash=d2ddc7efd124d807e66b8ad7de904f91
+443|tap-443|https://embed13.streamc.xyz/embed.php?hash=76cddc25585edd05ebb3f02135e1f7b6
+444|tap-444|https://embed13.streamc.xyz/embed.php?hash=988345c0eff8d3aa23401182fafabe40
+445|tap-445|https://embed13.streamc.xyz/embed.php?hash=5244321f6e7d2853bc7668a128236850
+446|tap-446|https://embed13.streamc.xyz/embed.php?hash=12119e1b08473e6039137cddba40e2a8
+447|tap-447|https://embed13.streamc.xyz/embed.php?hash=86f2ead4b703e34de5377d82a68f97a0
+448|tap-448|https://embed13.streamc.xyz/embed.php?hash=73dd0cfe2bcfe75e9110b577ed1854c0
+449|tap-449|https://embed13.streamc.xyz/embed.php?hash=83ea904323b95a39ebf40d44f37e1516
+450|tap-450|https://embed13.streamc.xyz/embed.php?hash=05dc721c9f616a941967d0aa2ee62fa3
+451|tap-451|https://embed12.streamc.xyz/embed.php?hash=cd0854ecd881cda7a693629c833c9a56
+452|tap-452|https://embed12.streamc.xyz/embed.php?hash=0d3b6e76e5571bd51362bc07c8e452a4
+453|tap-453|https://embed12.streamc.xyz/embed.php?hash=34d10a1aba398bda82692d9684f0ae9d
+454|tap-454|https://embed12.streamc.xyz/embed.php?hash=1b76237bdba2bb6babbb5dc10716a648
+455|tap-455|https://embed12.streamc.xyz/embed.php?hash=ab0a4e6cf7f0f63522e2b95d30be6bac
+456|tap-456|https://embed12.streamc.xyz/embed.php?hash=e723dbcd1fac8da724858723fb4808dc
+457|tap-457|https://embed12.streamc.xyz/embed.php?hash=32b52e2bcda53dfe8a69395dbfa2bbbc
+458|tap-458|https://embed12.streamc.xyz/embed.php?hash=db3c6e51433ba0a6b4cf1daa3d81983d
+459|tap-459|https://embed12.streamc.xyz/embed.php?hash=1a8b980a5b04b97d9ea7d172a3a24835
+460|tap-460|https://embed12.streamc.xyz/embed.php?hash=2487550c435fa4bec98639ca17279652
+461|tap-461|https://embed12.streamc.xyz/embed.php?hash=0f4a29e65e125c68be94ce1d4e28d495
+462|tap-462|https://embed12.streamc.xyz/embed.php?hash=a4e355426afce997a411a2a69cc9db23
+463|tap-463|https://embed12.streamc.xyz/embed.php?hash=83440067671b0d7235960d05851bce7e
+464|tap-464|https://embed12.streamc.xyz/embed.php?hash=01d931a2237ef832464d8c8b53dccb3e
+465|tap-465|https://embed12.streamc.xyz/embed.php?hash=c4ad66fe26382ab4d449a989bb0ad92f
+466|tap-466|https://embed12.streamc.xyz/embed.php?hash=b12a37dd7abf06a9a971fd4e7ec9f957
+467|tap-467|https://embed12.streamc.xyz/embed.php?hash=a32c0f2660ad92026e046f6f32821c0f
+468|tap-468|https://embed12.streamc.xyz/embed.php?hash=67578f4c7ec8d87023732017744fc9b1
+469|tap-469|https://embed12.streamc.xyz/embed.php?hash=e0117b96073526f42476b5f857b4a337
+470|tap-470|https://embed12.streamc.xyz/embed.php?hash=7cd6859a823c63ff9982a2de6f73be63
+471|tap-471|https://embed12.streamc.xyz/embed.php?hash=702e63aca72b762e8e9111be208c3f46
+472|tap-472|https://embed12.streamc.xyz/embed.php?hash=7d4cc7bc1245844bcbf71ef410d0d420
+473|tap-473|https://embed12.streamc.xyz/embed.php?hash=8cd25cf2800937417eaab94da6268862
+474|tap-474|https://embed12.streamc.xyz/embed.php?hash=02728851fd85cee712c60a1d1c9c902a
+475|tap-475|https://embed12.streamc.xyz/embed.php?hash=cff6e5c0603ae4871a151338540334bd
+476|tap-476|https://embed12.streamc.xyz/embed.php?hash=39a70e5b3f7c22c2f8e09b794888e726
+477|tap-477|https://embed12.streamc.xyz/embed.php?hash=16224dcc5eb249c1f500818fa7ba9aaa
+478|tap-478|https://embed12.streamc.xyz/embed.php?hash=d1075a3e9b54799190cd6a1fb34343a6
+479|tap-479|https://embed12.streamc.xyz/embed.php?hash=2d5c2820601a4da43e5bbdf442100836
+480|tap-480|https://embed12.streamc.xyz/embed.php?hash=c1152af70ef3bfe1a6863323ae78b366
+481|tap-481|https://embed12.streamc.xyz/embed.php?hash=94bb6bc309690caf5a3cfd9d8eb51a71
+482|tap-482|https://embed12.streamc.xyz/embed.php?hash=8bc3554adf59c07e0fa7ba5616ef66a1
+483|tap-483|https://embed12.streamc.xyz/embed.php?hash=51ee72260b5719044849dbe28442469d
+484|tap-484|https://embed12.streamc.xyz/embed.php?hash=6498c53156a590d8293186d37fd09374
+485|tap-485|https://embed10.streamc.xyz/embed.php?hash=9b12e2a634f62c4741f2dd3906a499da
+486|tap-486|https://embed10.streamc.xyz/embed.php?hash=df7f47c4535f6a4c514f10156877dd7d
+487|tap-487|https://embed10.streamc.xyz/embed.php?hash=2ba85acbadf4f6c36dd935a8ce0e1fd8
+488|tap-488|https://embed10.streamc.xyz/embed.php?hash=e9bc001c047882a61c2714f9fdca74fc
+489|tap-489|https://embed10.streamc.xyz/embed.php?hash=027559041bea5d0219da9b34875d816a
+490|tap-490|https://embed10.streamc.xyz/embed.php?hash=cfcebc7455ed8c7a4316adb4ff918121
+491|tap-491|https://embed10.streamc.xyz/embed.php?hash=f4258e5a480850a1c787d602ae8cbf35
+492|tap-492|https://embed10.streamc.xyz/embed.php?hash=538f979daa0620e260f1a8d39a8311d4
+493|tap-493|https://embed10.streamc.xyz/embed.php?hash=505818432a69036dccd47a07d8f20758
+494|tap-494|https://embed10.streamc.xyz/embed.php?hash=91bb0988539da34bd8f7f56b67959ac4
+495|tap-495|https://embed10.streamc.xyz/embed.php?hash=55f441e17c8c4ef200964815548c8a3b
+496|tap-496|https://embed10.streamc.xyz/embed.php?hash=65e694d77d4ff2a6a3373d6864e96d29
+497|tap-497|https://embed10.streamc.xyz/embed.php?hash=9e53bea58c8dec24266a9bfa121cfc46
+498|tap-498|https://embed10.streamc.xyz/embed.php?hash=4a46dfc7b6466ab00e5e19bc102567c8
+499|tap-499|https://embed10.streamc.xyz/embed.php?hash=7478984526ea93235ad9c1a0279f120b
+500|tap-500|https://embed10.streamc.xyz/embed.php?hash=946035a0601dfb2e560c18217145534a
+501|tap-501|https://embed10.streamc.xyz/embed.php?hash=c2c3171e9dfb6368c0925779a9350188
+502|tap-502|https://embed10.streamc.xyz/embed.php?hash=54a1c138d9b2ff68f59638ecc588ecb7
+503|tap-503|https://embed10.streamc.xyz/embed.php?hash=6f321b8d8f0f1db3e9159f5abda3f885
+504|tap-504|https://embed10.streamc.xyz/embed.php?hash=98de64a535d1c1c47bad0b11587b5514
+505|tap-505|https://embed10.streamc.xyz/embed.php?hash=88875c83adb3106a74760e662209bfd2
+506|tap-506|https://embed10.streamc.xyz/embed.php?hash=39607c4e58ab6bc0dc1580f3e2ced117
+507|tap-507|https://embed10.streamc.xyz/embed.php?hash=25186dc8d8cf5a5c01737dd85d69481c
+508|tap-508|https://embed10.streamc.xyz/embed.php?hash=501e60cc78a209ef695bd4ce859030ce
+509|tap-509|https://embed10.streamc.xyz/embed.php?hash=06e8fd150344b3ef0febd2869246511f
+510|tap-510|https://embed10.streamc.xyz/embed.php?hash=a0526129bed6d766376671da85cec063
+511|tap-511|https://embed10.streamc.xyz/embed.php?hash=f427f995d57b73f20ff097611ac8f981
+512|tap-512|https://embed10.streamc.xyz/embed.php?hash=25a4f322b98927cd3a32abd1964a28c9
+513|tap-513|https://embed10.streamc.xyz/embed.php?hash=663c0739a0e60d49ad4ee77df1364cc2
+514|tap-514|https://embed10.streamc.xyz/embed.php?hash=9be699dbb24c293589b53aa7ec3654bc
+515|tap-515|https://embed10.streamc.xyz/embed.php?hash=e7105922b691e1df8708ab5a03562366
+516|tap-516|https://embed10.streamc.xyz/embed.php?hash=a641ea1a389e0c44d1afd67ba671f5ca
+517|tap-517|https://embed18.streamc.xyz/embed.php?hash=1a1db678680825f385cf9e7c78aba867
+518|tap-518|https://embed18.streamc.xyz/embed.php?hash=a249ff3b05ddde868ca739daf026f302
+519|tap-519|https://embed18.streamc.xyz/embed.php?hash=e4144e1ae10b095382faace1addf04c6
+520|tap-520|https://embed18.streamc.xyz/embed.php?hash=943106ed12fef0efff0c95b2e49ddd97
+521|tap-521|https://embed18.streamc.xyz/embed.php?hash=744ecc04b16eced29485a1f5140e4b73
+522|tap-522|https://embed18.streamc.xyz/embed.php?hash=c14a1ed8382d1e9b7c97a762834f892c
+523|tap-523|https://embed18.streamc.xyz/embed.php?hash=2839094584610d44135fcc514d003e1c
+524|tap-524|https://embed18.streamc.xyz/embed.php?hash=7d07f5d51e663ac7559a516a7abea31f
+525|tap-525|https://embed18.streamc.xyz/embed.php?hash=c8580551f6a26d826fc801a754e02800
+526|tap-526|https://embed18.streamc.xyz/embed.php?hash=f353b8b0146825695041c313c37887ff
+527|tap-527|https://embed18.streamc.xyz/embed.php?hash=329c15aec0fe0ff4edb9a8511114dc78
+528|tap-528|https://embed18.streamc.xyz/embed.php?hash=a4c208b528ede19790d917e06ad4b8de
+529|tap-529|https://embed18.streamc.xyz/embed.php?hash=485ee2054754be65d06d66f696cf189b
+530|tap-530|https://embed18.streamc.xyz/embed.php?hash=8f26712953ea0c092a7f81d494975da9
+531|tap-531|https://embed18.streamc.xyz/embed.php?hash=4fd3d735df4e705248a1b8236e3c45f6
+532|tap-532|https://embed18.streamc.xyz/embed.php?hash=ce7d6e3a6a0ecdc2661bb41aa86de322
+533|tap-533|https://embed18.streamc.xyz/embed.php?hash=d7583698536c8714492ece491a395be9
+534|tap-534|https://embed18.streamc.xyz/embed.php?hash=7b1618b0ae452e0a293a3291b984f513
+535|tap-535|https://embed18.streamc.xyz/embed.php?hash=1aa94fb663f138304d65e4c6902bf787
+536|tap-536|https://embed18.streamc.xyz/embed.php?hash=30149a88d16ffa3ca087968e46247df0
+537|tap-537|https://embed18.streamc.xyz/embed.php?hash=d393b6165fe6e3bdb00240816f2ccaf7
+538|tap-538|https://embed18.streamc.xyz/embed.php?hash=4129b47b8b05194f348fad8da8ec0392
+539|tap-539|https://embed18.streamc.xyz/embed.php?hash=5c91d46b80b2703cc1e626deed58ec9e
+540|tap-540|https://embed18.streamc.xyz/embed.php?hash=4e4cea2556b0657abe6bf7e3ef3ab45b
+541|tap-541|https://embed18.streamc.xyz/embed.php?hash=d13fdc639a5b01b24cd343a9bcdde39f
+542|tap-542|https://embed18.streamc.xyz/embed.php?hash=54c26c9504f2a5c08bc78c6e4895de0a
+543|tap-543|https://embed18.streamc.xyz/embed.php?hash=25d19f6e708858bf0a9aa4b6dc1ff946
+544|tap-544|https://embed18.streamc.xyz/embed.php?hash=70f414684bcbcfe9e0d46aaf322b28fc
+545|tap-545|https://embed18.streamc.xyz/embed.php?hash=0e9544b5143503e1cd715f8a2808f0be
+546|tap-546|https://embed18.streamc.xyz/embed.php?hash=31b3cdbb49d5ebca922873f1c7529998
+547|tap-547|https://embed18.streamc.xyz/embed.php?hash=19537959571c38c6e4def6c086b51601
+548|tap-548|https://embed15.streamc.xyz/embed.php?hash=642ecbd12f778565a28536fcca63a076
+549|tap-549|https://embed15.streamc.xyz/embed.php?hash=96fdd832d0aafa8f3cc7de7da34e7374
+550|tap-550|https://embed15.streamc.xyz/embed.php?hash=bc8d04c6994198c09169c2072e28a111
+551|tap-551|https://embed15.streamc.xyz/embed.php?hash=0823a70792540af7520ead47dbc5d6f9
+552|tap-552|https://embed15.streamc.xyz/embed.php?hash=72bffb390420632e12b1799effd59019
+553|tap-553|https://embed15.streamc.xyz/embed.php?hash=df85972cd016876d05bb21b6fdbd3a87
+554|tap-554|https://embed15.streamc.xyz/embed.php?hash=6b9290a815756e0285a27db7d7628034
+555|tap-555|https://embed15.streamc.xyz/embed.php?hash=6758beb9f3404557ec6e763ff8a33cb0
+556|tap-556|https://embed15.streamc.xyz/embed.php?hash=abaa669aed4b2b873c67b34b16bcc887
+557|tap-557|https://embed15.streamc.xyz/embed.php?hash=b0fcfc8b7ebe47afd396b5af296375cf
+558|tap-558|https://embed15.streamc.xyz/embed.php?hash=964fe092ce22bf106f8aa3eba56fe4fc
+559|tap-559|https://embed15.streamc.xyz/embed.php?hash=8c88eed6c2753e383b55fe02794c4527
+560|tap-560|https://embed15.streamc.xyz/embed.php?hash=6d32921291aae0bb524a60186d89b7a4
+561|tap-561|https://embed15.streamc.xyz/embed.php?hash=956ee4ec256f7d5972b5473266f43ee2
+562|tap-562|https://embed15.streamc.xyz/embed.php?hash=15d4d792f1879d6c76122fedb98eee0e
+563|tap-563|https://embed14.streamc.xyz/embed.php?hash=53dda0b68cdc3762676785b16b878fbd
+564|tap-564|https://embed14.streamc.xyz/embed.php?hash=6fd2f74e12346e6d2af802161c879425
+565|tap-565|https://embed14.streamc.xyz/embed.php?hash=378855189ea2ddf46c2418e23a82ff83
+566|tap-566|https://embed15.streamc.xyz/embed.php?hash=0a3dddaf916c7accf47a571c2ffcccae
+567|tap-567|https://embed15.streamc.xyz/embed.php?hash=e81bdcf897b673f33f03517ad1b3e646
+568|tap-568|https://embed15.streamc.xyz/embed.php?hash=e20467e51dc5c9aa7e10cce82953c700
+569|tap-569|https://embed15.streamc.xyz/embed.php?hash=b7e3622d39ea2eee3cf105dad2157309
+570|tap-570|https://embed15.streamc.xyz/embed.php?hash=98255fb408cb40c146e78d5be29167b5
+571|tap-571|https://embed15.streamc.xyz/embed.php?hash=34505bdd5a29cd374fe79900334a26b4
+572|tap-572|https://embed15.streamc.xyz/embed.php?hash=d844a5374b0c8408d3f00c7efeac03be
+573|tap-573|https://embed15.streamc.xyz/embed.php?hash=60d92d4afd195a026e04fda56dfb31a3
+574|tap-574|https://embed15.streamc.xyz/embed.php?hash=38b0f4dc4be8889f8c549cc674f15f23
+575|tap-575|https://embed15.streamc.xyz/embed.php?hash=6b9b9792acc016ead3b7a9581c79f683
+576|tap-576|https://embed15.streamc.xyz/embed.php?hash=1a18d4891875afe35511aab31a567a53
+577|tap-577|https://embed15.streamc.xyz/embed.php?hash=b28a286f201ea12c54e79f0072fee57d
+578|tap-578|https://embed14.streamc.xyz/embed.php?hash=c2007679c8971872c8aa3c8c9c3a7113
+579|tap-579|https://embed14.streamc.xyz/embed.php?hash=93a9f01da52c2bacfee197becac24d1a
+580|tap-580|https://embed14.streamc.xyz/embed.php?hash=9fca073fa4927af3b81e0b061a9bfb23
+581|tap-581|https://embed14.streamc.xyz/embed.php?hash=d9461a2df67123f238a63c43219a4630
+582|tap-582|https://embed14.streamc.xyz/embed.php?hash=a804b77595f414fe7358c5d3ee25bd35
+583|tap-583|https://embed14.streamc.xyz/embed.php?hash=06963fe6812deb13f2a91e77a660e687
+584|tap-584|https://embed14.streamc.xyz/embed.php?hash=040e7ad2510f303ca62480bf90964f03
+585|tap-585|https://embed14.streamc.xyz/embed.php?hash=ff58f93cb69ccb4a33cd9040f1edaaa9
+586|tap-586|https://embed14.streamc.xyz/embed.php?hash=1a917248d2a901dd95391e225cc47f28
+587|tap-587|https://embed14.streamc.xyz/embed.php?hash=7a9cd717b650638555ada1949b9bbc3a
+588|tap-588|https://embed14.streamc.xyz/embed.php?hash=4963590ce3ea15b443310042244a0f41
+589|tap-589|https://embed14.streamc.xyz/embed.php?hash=17caff067b38db3307439a68c871683d
+590|tap-590|https://embed14.streamc.xyz/embed.php?hash=eb22b559bcf03ca8f8984774be8959f2
+591|tap-591|https://embed14.streamc.xyz/embed.php?hash=c46d257a7acd074f773887e82144cb9c
+592|tap-592|https://embed14.streamc.xyz/embed.php?hash=322b07f39b8472d2b979430f1075cf4f
+593|tap-593|https://embed14.streamc.xyz/embed.php?hash=3d9a1352ad155108209642aac55a4496
+594|tap-594|https://embed14.streamc.xyz/embed.php?hash=a079e2d0a586a3d3879e5944a3fea963
+595|tap-595|https://embed14.streamc.xyz/embed.php?hash=edfbf3a913561079908032ab89995988
+596|tap-596|https://embed14.streamc.xyz/embed.php?hash=d777eb3d75f38f20e7f56965a05da907
+597|tap-597|https://embed14.streamc.xyz/embed.php?hash=94f6c6c19bc8302d3f84cf39bf2486cb
+598|tap-598|https://embed14.streamc.xyz/embed.php?hash=e9caf18707f3ae76bee57e5452ab5d98
+599|tap-599|https://embed14.streamc.xyz/embed.php?hash=5ac970691b5432e4f7394560c6196172
+600|tap-600|https://embed14.streamc.xyz/embed.php?hash=ef74a36420aea3a804b5961136615454
+601|tap-601|https://embed13.streamc.xyz/embed.php?hash=83f3f8316035d6208490c04f288fa49d
+602|tap-602|https://embed13.streamc.xyz/embed.php?hash=164539460f3f9e2a5d90f4e55ca75432
+603|tap-603|https://embed13.streamc.xyz/embed.php?hash=5f53bbf2d391599a250838905a404540
+604|tap-604|https://embed12.streamc.xyz/embed.php?hash=96feef57896a290f4fb90538be77fcf3
+605|tap-605|https://embed12.streamc.xyz/embed.php?hash=ddc1e22252957195f7e813bdab6f3d18
+606|tap-606|https://embed12.streamc.xyz/embed.php?hash=5484cb3f97f34809c3aa54ea7a04c879
+607|tap-607|https://embed12.streamc.xyz/embed.php?hash=dfb122e0e33cd831de402ddf83b9d8cd
+608|tap-608|https://embed12.streamc.xyz/embed.php?hash=5b04a04e23d1cbf9e7b93812078d9861
+609|tap-609|https://embed12.streamc.xyz/embed.php?hash=6f0cc1fe6943af00a2dd70a3e897c3c5
+610|tap-610|https://embed12.streamc.xyz/embed.php?hash=8c2c547f7d2308048efb018bb69f793d
+611|tap-611|https://embed12.streamc.xyz/embed.php?hash=fbae4597e018f3d61e9bb790d51c5cc9
+612|tap-612|https://embed11.streamc.xyz/embed.php?hash=84b278a74fc16c484ff7f834b008bd9a
+613|tap-613|https://embed11.streamc.xyz/embed.php?hash=3eabc47cee044c82dd6b6194f4bfa1c2
+614|tap-614|https://embed11.streamc.xyz/embed.php?hash=1557793e231fa05f237cfce7ec9b46cd
+615|tap-615|https://embed11.streamc.xyz/embed.php?hash=3b8b4c68da02ade1cfe3b0aa12c6756f
+616|tap-616|https://embed11.streamc.xyz/embed.php?hash=032ab58dc477f0e3d5f21fdf6b81fad9
+617|tap-617|https://embed11.streamc.xyz/embed.php?hash=75db33b6cc961b81e3ac21de9ffa1b8a
+618|tap-618|https://embed14.streamc.xyz/embed.php?hash=ad965f7932126767ebc25ed5f0f434c6
+619|tap-619|https://embed14.streamc.xyz/embed.php?hash=8ea5323cbebe151f7e5a640644c2992e
+620|tap-620|https://embed14.streamc.xyz/embed.php?hash=4c00cc69e387bc25bddb6041ec096d8f
+621|tap-621|https://embed14.streamc.xyz/embed.php?hash=4f5f7dd8a5d3c53b4a554f0086db8d1e
+622|tap-622|https://embed14.streamc.xyz/embed.php?hash=ef0dcdc6caf3686a5c8ca04d9457c3ed
+623|tap-623|https://embed14.streamc.xyz/embed.php?hash=663687fcdcbcdcfb16380073f01ff726
+624|tap-624|https://embed14.streamc.xyz/embed.php?hash=368e26a4c50580d8501ae91a627394c9
+625|tap-625|https://embed15.streamc.xyz/embed.php?hash=d9bd91a677e2d81f77fe868f2854d34f
+626|tap-626|https://embed15.streamc.xyz/embed.php?hash=e9d8b1954f617e229966fdf99305fa0e
+627|tap-627|https://embed15.streamc.xyz/embed.php?hash=99e6b2c5b59dbc0216c7bfda6d83ee67
+628|tap-628|https://embed15.streamc.xyz/embed.php?hash=67268ce306373a671bb6dfef3dce84c8
+629|tap-629|https://embed13.streamc.xyz/embed.php?hash=9f331665ca5b041cd4345c0248ebbf20
+630|tap-630|https://embed13.streamc.xyz/embed.php?hash=a497b6fd3020f0fb05b158be86b9d3c3
+631|tap-631|https://embed13.streamc.xyz/embed.php?hash=916ab634790fd93edc69109e346d9d7e
+632|tap-632|https://embed13.streamc.xyz/embed.php?hash=d4e6af3629e04bbdfe66fb1b80844731
+633|tap-633|https://embed13.streamc.xyz/embed.php?hash=db2039a2dcb4135be6d02c2321b410b3
+634|tap-634|https://embed13.streamc.xyz/embed.php?hash=1de9364574cac4cd4c3c0d65c8641dbf
+635|tap-635|https://embed13.streamc.xyz/embed.php?hash=3ea77c14a1a71bc86b189e48ded9bc0b
+636|tap-636|https://embed13.streamc.xyz/embed.php?hash=4bff12540454527e460a0ac0a20caa62
+637|tap-637|https://embed13.streamc.xyz/embed.php?hash=8b7d7fc7c65b3e30054410216de9287d
+638|tap-638|https://embed13.streamc.xyz/embed.php?hash=29593687f602bea3e6a0f465d6d0a2f6
+639|tap-639|https://embed12.streamc.xyz/embed.php?hash=4328c6fdca4a6c211c5f0830ade62c0f
+640|tap-640|https://embed12.streamc.xyz/embed.php?hash=b1e965588062a2104a3c4bafcfdb6253
+641|tap-641|https://embed12.streamc.xyz/embed.php?hash=9999df1d8869cfacd23322a13e13b06c
+642|tap-642|https://embed12.streamc.xyz/embed.php?hash=8f2b564e313d677e58999f9d1e8f3487
+643|tap-643|https://embed12.streamc.xyz/embed.php?hash=2d4976e2467380a57e0df86355e55ec1
+644|tap-644|https://embed12.streamc.xyz/embed.php?hash=6ea0f1f2492a385926af054e39f00a7a
+645|tap-645|https://embed12.streamc.xyz/embed.php?hash=c0f8e6ba9e82c03ff39d24ec5cb429a9
+646|tap-646|https://embed11.streamc.xyz/embed.php?hash=4542d30e1d98c02c10d35f44f5c7413f
+647|tap-647|https://embed11.streamc.xyz/embed.php?hash=9fa81af52a8dd6c54a5325a1219491af
+648|tap-648|https://embed11.streamc.xyz/embed.php?hash=25740322c75eafa01c851807c082eabb
+649|tap-649|https://embed11.streamc.xyz/embed.php?hash=4dd82744459dbc994f33b15f91b3514f
+650|tap-650|https://embed11.streamc.xyz/embed.php?hash=802de0889ee5f2f9b00499232b72a01d
+651|tap-651|https://embed11.streamc.xyz/embed.php?hash=0f8c4973b400b4ae0135627e13c7d713
+652|tap-652|https://embed14.streamc.xyz/embed.php?hash=8fbe392c718845b46ac447bc55fe8ba9
+653|tap-653|https://embed14.streamc.xyz/embed.php?hash=a9be8d6cc8c18b4eec8d32abade666ff
+654|tap-654|https://embed14.streamc.xyz/embed.php?hash=42e7356236cea44b608ecc2d612436f4
+655|tap-655|https://embed14.streamc.xyz/embed.php?hash=84ef71cb3fbcbe59bfe77ed712c99562
+656|tap-656|https://embed14.streamc.xyz/embed.php?hash=36183ef2f74d8922f87898344102d096
+657|tap-657|https://embed14.streamc.xyz/embed.php?hash=d359fa65a16c284ee3b8472233472d1b
+658|tap-658|https://embed14.streamc.xyz/embed.php?hash=17e041d4d628518a6e0a6782c676c1a5
+659|tap-659|https://embed14.streamc.xyz/embed.php?hash=f26bcecdf713300c2845929cdfc133fd
+660|tap-660|https://embed15.streamc.xyz/embed.php?hash=90f50cf4d6bd94b13ad908e8c73bdb53
+661|tap-661|https://embed15.streamc.xyz/embed.php?hash=1f38aa5fc776f5a9c582a6f8415ff24a
+662|tap-662|https://embed15.streamc.xyz/embed.php?hash=263d5c004a019bea94b488370ba3119d
+663|tap-663|https://embed15.streamc.xyz/embed.php?hash=490fecd816edf4d8dda92fc80816ea9b
+664|tap-664|https://embed15.streamc.xyz/embed.php?hash=ed1ed4dc1787971bbc50ad5c18a4df3f
+665|tap-665|https://embed15.streamc.xyz/embed.php?hash=242a9dae9d606ed7d12c915376140f19
+666|tap-666|https://embed15.streamc.xyz/embed.php?hash=981d34a654c31492c606141c76f8e410
+667|tap-667|https://embed15.streamc.xyz/embed.php?hash=a2468bf349c9fc34adb317a51e69b656
+668|tap-668|https://embed15.streamc.xyz/embed.php?hash=a794435de72d41554d7596dcb2806253
+669|tap-669|https://embed15.streamc.xyz/embed.php?hash=97ae4e8de385a343c09295f4cf73e910
+670|tap-670|https://embed15.streamc.xyz/embed.php?hash=855480b607a0cd02adc45322703a610a
+671|tap-671|https://embed18.streamc.xyz/embed.php?hash=53342de7ff4a41cc965458402383d3af
+672|tap-672|https://embed18.streamc.xyz/embed.php?hash=91cd3f46d9d641b4dbd70b8d8759176a
+673|tap-673|https://embed18.streamc.xyz/embed.php?hash=2ffd6b4e33e8e66b7ae5762829a3e7b9
+674|tap-674|https://embed18.streamc.xyz/embed.php?hash=5a27e7887d3ca6c3b87d4a0068499fde
+675|tap-675|https://embed18.streamc.xyz/embed.php?hash=c89dbe25b52dc406d292f9e951142c29
+676|tap-676|https://embed18.streamc.xyz/embed.php?hash=054faa57ab83f603fa3625b6a0b10335
+677|tap-677|https://embed18.streamc.xyz/embed.php?hash=fe0167e6be6d827925138ee73cbaffaa
+678|tap-678|https://embed18.streamc.xyz/embed.php?hash=cc7e540a0f8479a0ff511e4becf6ff63
+679|tap-679|https://embed18.streamc.xyz/embed.php?hash=a359c7868ab220727dc360602825b599
+680|tap-680|https://embed18.streamc.xyz/embed.php?hash=47082a0d817b9887e97cb13a335719a9
+681|tap-681|https://embed18.streamc.xyz/embed.php?hash=fcba76f647cc7a12ee77f4dbcbbe9028
+682|tap-682|https://embed18.streamc.xyz/embed.php?hash=cbbd82ba3b01ad300c4c9dd16ad97ef7
+683|tap-683|https://embed18.streamc.xyz/embed.php?hash=98f7fe53bc39926ec88496c7ed70c38a
+684|tap-684|https://embed18.streamc.xyz/embed.php?hash=8c070785b3a67439735ae246f07721ad
+685|tap-685|https://embed18.streamc.xyz/embed.php?hash=973813c01e8e427af6efa0c038c26a5b
+686|tap-686|https://embed11.streamc.xyz/embed.php?hash=816d101d632124d79cae49e3a3883a9e
+687|tap-687|https://embed11.streamc.xyz/embed.php?hash=783c03f480c86a8e6b2e209f51ee072e
+688|tap-688|https://embed11.streamc.xyz/embed.php?hash=81d0429d9ec6571518da5604fb18aa57
+689|tap-689|https://embed12.streamc.xyz/embed.php?hash=e868e29367a77dec3676dfa5e6862d54
+690|tap-690|https://embed12.streamc.xyz/embed.php?hash=fd4f744491d349f821ab9908fdfbb6f2
+691|tap-691|https://embed11.streamc.xyz/embed.php?hash=405f003b5440cea271e48d1af2b46de4
+692|tap-692|https://embed11.streamc.xyz/embed.php?hash=7eee61f8c48a5633653e811e110305eb
+693|tap-693|https://embed11.streamc.xyz/embed.php?hash=860dc7f9ca1d18bc260fe69fabb77ed6
+694|tap-694|https://embed11.streamc.xyz/embed.php?hash=1cd230b5e55c6c57de1108599264197d
+695|tap-695|https://embed11.streamc.xyz/embed.php?hash=02cb8b6356fef6e986035f8846563823
+696|tap-696|https://embed12.streamc.xyz/embed.php?hash=634b0ad485d849ca3dcb5d8797d885cd
+697|tap-697|https://embed11.streamc.xyz/embed.php?hash=42b1a9ce25a47aca8ada9fcf25bf67b7
+698|tap-698|https://embed11.streamc.xyz/embed.php?hash=7db7aa121e707e373763c4bd48267889
+699|tap-699|https://embed11.streamc.xyz/embed.php?hash=f481563624e4ff076521c3864122f280
+700|tap-700|https://embed11.streamc.xyz/embed.php?hash=fafdb5ac5fe9cb13fdb2c3a75fe42aac
+701|tap-701|https://embed11.streamc.xyz/embed.php?hash=414b5cc1941564981c08ca516b5f540c
+702|tap-702|https://embed11.streamc.xyz/embed.php?hash=5bb50221433ed6571d448fe0d58d6e14
+703|tap-703|https://embed11.streamc.xyz/embed.php?hash=bf5547b02ccecc2f3e8dc394a11fdb45
+704|tap-704|https://embed11.streamc.xyz/embed.php?hash=44fcf71c567bc7214be3352ff40f6b55
+705|tap-705|https://embed11.streamc.xyz/embed.php?hash=5b1ca50c938169482e671e3adec81967
+706|tap-706|https://embed11.streamc.xyz/embed.php?hash=34a1e4e6f680ac1da1dfe45e63a58f41
+707|tap-707|https://embed11.streamc.xyz/embed.php?hash=01a7a33fa9962c89eb23c2ae579e7583
+708|tap-708|https://embed11.streamc.xyz/embed.php?hash=13b9ce0c8b36ae036a8e95e6b7b5386a
+709|tap-709|https://embed11.streamc.xyz/embed.php?hash=1bb9ea2ce45a787a753721a982af62de
+710|tap-710|https://embed11.streamc.xyz/embed.php?hash=dcbeaf117665e2c41d0facf56cbf46c4
+711|tap-711|https://embed11.streamc.xyz/embed.php?hash=bd8cb017ba0244c363a8ba1e14c75c01
+712|tap-712|https://embed11.streamc.xyz/embed.php?hash=535df8d3a575488f3b92051f71012c7f
+713|tap-713|https://embed11.streamc.xyz/embed.php?hash=bc575a7b48ecdbb2b9c4de56dccb0c56
+714|tap-714|https://embed11.streamc.xyz/embed.php?hash=f0f25de917f9a4d2a3d303e0b0c4c611
+715|tap-715|https://embed11.streamc.xyz/embed.php?hash=3738276f9e4b69d9dc401ca55f82cc49
+716|tap-716|https://embed11.streamc.xyz/embed.php?hash=28e90ce257726cc41d6cc3837cefba1d
+717|tap-717|https://embed12.streamc.xyz/embed.php?hash=468edc603937c04173656ca122363893
+718|tap-718|https://embed12.streamc.xyz/embed.php?hash=ba8814e3fa74313681e87c032b43d0b3
+719|tap-719|https://embed12.streamc.xyz/embed.php?hash=02ce5a1c8d39a8d8d3a15560d327ac92
+720|tap-720|https://embed12.streamc.xyz/embed.php?hash=1dca52fd5436652a4382668a18b98de2
+721|tap-721|https://embed12.streamc.xyz/embed.php?hash=7da17e59ea007650f06ec0b87d315dda
+722|tap-722|https://embed12.streamc.xyz/embed.php?hash=ccdf8fb48eea30eaa973ebcd3eac628c
+723|tap-723|https://embed12.streamc.xyz/embed.php?hash=a62afbbf125e72c9735b48bfefe1843a
+724|tap-724|https://embed12.streamc.xyz/embed.php?hash=25bcf8770e89c910ac3b5d242a54a195
+725|tap-725|https://embed12.streamc.xyz/embed.php?hash=450febed78c03a4eb2d1fdcb6c56366d
+726|tap-726|https://embed12.streamc.xyz/embed.php?hash=0c8c2d7b7bc282bca827e15346e5539c
+727|tap-727|https://embed12.streamc.xyz/embed.php?hash=5f5b4eac69ba14aa08bf23f93a3560c6
+728|tap-728|https://embed12.streamc.xyz/embed.php?hash=0ab12b907e9c13bea460174c37ae9ef5
+729|tap-729|https://embed12.streamc.xyz/embed.php?hash=df6bedc09abb02480ff3e6c27996422e
+730|tap-730|https://embed12.streamc.xyz/embed.php?hash=97cf598de8c482efe9795cd57b9e686b
+731|tap-731|https://embed12.streamc.xyz/embed.php?hash=4d1058bec4aa201dd51cb0cd87bb69e0
+732|tap-732|https://embed12.streamc.xyz/embed.php?hash=159485c2d1ca7e89966a34a13f6696b3
+733|tap-733|https://embed13.streamc.xyz/embed.php?hash=7459b1b10ef5fc2e72f6d19eaebb1290
+734|tap-734|https://embed13.streamc.xyz/embed.php?hash=f2741317ddd18be3a940dbc577034233
+735|tap-735|https://embed13.streamc.xyz/embed.php?hash=b2df53a2c986c808159abb6c8084ab3a
+736|tap-736|https://embed13.streamc.xyz/embed.php?hash=6a7b35e411de7bcca52c697c3f38f9e4
+737|tap-737|https://embed13.streamc.xyz/embed.php?hash=280b975bed528dc171e2a12bb7cf0341
+738|tap-738|https://embed13.streamc.xyz/embed.php?hash=ac5a1c0ed1c1df999492444238551bcc
+739|tap-739|https://embed13.streamc.xyz/embed.php?hash=470f07a11772e63d1cb92c4093963089
+740|tap-740|https://embed13.streamc.xyz/embed.php?hash=4be5645849c9dba7793402a75afd421d
+741|tap-741|https://embed13.streamc.xyz/embed.php?hash=c4bd3942c3c8b740a3c345b0b0152fab
+742|tap-742|https://embed13.streamc.xyz/embed.php?hash=be98a582cd3c006260f2ab2059faef93
+743|tap-743|https://embed13.streamc.xyz/embed.php?hash=efb8bad0bcea6d843d8772b9140cffb2
+744|tap-744|https://embed13.streamc.xyz/embed.php?hash=4e05a0402f085aa3aaa7a17afcd24aa4
+745|tap-745|https://embed13.streamc.xyz/embed.php?hash=ae94abd03cb511e52f9144340729ca37
+746|tap-746|https://embed13.streamc.xyz/embed.php?hash=187861fff1afa80e476f134d3c4c9e76
+747|tap-747|https://embed13.streamc.xyz/embed.php?hash=f61b53429f8d29fdd0b16c62f8db9be3
+748|tap-748|https://embed13.streamc.xyz/embed.php?hash=b6aae45b4c6bf2739b5be0b93b2c51f2
+749|tap-749|https://embed13.streamc.xyz/embed.php?hash=6aa83fc78dc36616281d0d5b979b4f60
+750|tap-750|https://embed18.streamc.xyz/embed.php?hash=13a197382bc18f75d8e58e41ba579f14
+751|tap-751|https://embed18.streamc.xyz/embed.php?hash=c3a21ac0c6c4ddf157abc901b8dd110d
+752|tap-752|https://embed18.streamc.xyz/embed.php?hash=5d0f1055ddb66fd771212d6794d8c5bc
+753|tap-753|https://embed18.streamc.xyz/embed.php?hash=5faa2031a17c5c4451297ab5aeb2a67b
+754|tap-754|https://embed18.streamc.xyz/embed.php?hash=9e7d572cd975244a9d24a8c49d625b57
+755|tap-755|https://embed18.streamc.xyz/embed.php?hash=016dce902f34fd2bba332bbb8a494c22
+756|tap-756|https://embed18.streamc.xyz/embed.php?hash=9c995a52a6bacd415aca2e0df20fe1f9
+757|tap-757|https://embed18.streamc.xyz/embed.php?hash=843ab69b9359b2fbb027a5ac9fd83fe1
+758|tap-758|https://embed18.streamc.xyz/embed.php?hash=0a5c7c667352ec894c90d877f5a7e7b2
+759|tap-759|https://embed18.streamc.xyz/embed.php?hash=149925d2799b943091d6f0e7b5a2717a
+760|tap-760|https://embed18.streamc.xyz/embed.php?hash=7673c1f55a9c99b9e04df37caffaf4ba
+761|tap-761|https://embed18.streamc.xyz/embed.php?hash=94f14e9487f490acd281206b0f0e50b2
+762|tap-762|https://embed18.streamc.xyz/embed.php?hash=8b17492bf7c5ae9e150fca12dc074c4e
+763|tap-763|https://embed18.streamc.xyz/embed.php?hash=0b17fabe3018a225333e3e55db4e94c6
+764|tap-764|https://embed18.streamc.xyz/embed.php?hash=a3398e47f14fb577fd1f5fcbefe95781
+765|tap-765|https://embed18.streamc.xyz/embed.php?hash=92c740a89c5f79bd9d2afea40ac1aeaa
+766|tap-766|https://embed15.streamc.xyz/embed.php?hash=9c3924633ca1a8dd39c0211ddf9f8fa4
+767|tap-767|https://embed15.streamc.xyz/embed.php?hash=7f6bf01b95ebbcff98e3530dbd4acefb
+768|tap-768|https://embed15.streamc.xyz/embed.php?hash=e5dd18e360ff7e22516532ab97891166
+769|tap-769|https://embed15.streamc.xyz/embed.php?hash=2540572fce9d7dfcf3d47799b4da1af6
+770|tap-770|https://embed15.streamc.xyz/embed.php?hash=bdbf32e9ab88f97d7a9b1585214c77ef
+771|tap-771|https://embed15.streamc.xyz/embed.php?hash=7d5567b1b9b058be11470e52523c1125
+772|tap-772|https://embed15.streamc.xyz/embed.php?hash=a8fc34f4503c4b58f53cceeb4b3b35d1
+773|tap-773|https://embed15.streamc.xyz/embed.php?hash=20a4b44fdacb7fbf0430216c06c5b4c5
+774|tap-774|https://embed15.streamc.xyz/embed.php?hash=146b17e6477b6a1dc95631fac5c42898
+775|tap-775|https://embed15.streamc.xyz/embed.php?hash=d9a41780bbf6486443f6f7f9f684baa6
+776|tap-776|https://embed15.streamc.xyz/embed.php?hash=52f94850e3068f2a71d64ceb3c60820f
+777|tap-777|https://embed15.streamc.xyz/embed.php?hash=14cdd43171a8fb6de2c3f5dbc650b539
+778|tap-778|https://embed15.streamc.xyz/embed.php?hash=5b0b76cee1764630a2d064ce082c03d2
+779|tap-779|https://embed15.streamc.xyz/embed.php?hash=e33f425ee5196f812ff685214377e2b2
+780|tap-780|https://embed15.streamc.xyz/embed.php?hash=43a5d1789e5aec952f97836a8ead3573
+781|tap-781|https://embed15.streamc.xyz/embed.php?hash=83c08256421ad0718926d546b5caf6a1
+782|tap-782|https://embed15.streamc.xyz/embed.php?hash=432b2b24ae47a618a99c4516c9dff028
+783|tap-783|https://embed14.streamc.xyz/embed.php?hash=e964f15f31f2bd3a4156f6e8bebbbb83
+784|tap-784|https://embed14.streamc.xyz/embed.php?hash=413028eeb81134dc18ed5f470035dfea
+785|tap-785|https://embed14.streamc.xyz/embed.php?hash=c89c85cc667bc191f0508e0dd3dbef7d
+786|tap-786|https://embed14.streamc.xyz/embed.php?hash=2ff001553cf8a6c8c165a479ddf06c3c
+787|tap-787|https://embed14.streamc.xyz/embed.php?hash=329aa8d0afae3f1a5b5b0127d1414897
+788|tap-788|https://embed14.streamc.xyz/embed.php?hash=d3e2ff0c992599649a0546f0cba2825e
+789|tap-789|https://embed14.streamc.xyz/embed.php?hash=6a8b33a43274223dfdb7b6776bb32861
+790|tap-790|https://embed14.streamc.xyz/embed.php?hash=3e4d37d11246040a2fb47aaa778a3c31
+791|tap-791|https://embed14.streamc.xyz/embed.php?hash=0aa63fc91e754a149601ce5c18016b1b
+792|tap-792|https://embed14.streamc.xyz/embed.php?hash=56e34ceaca948075cfda2b0f8b6e5e5f
+793|tap-793|https://embed14.streamc.xyz/embed.php?hash=5c7e1574c1178648145ddfcf6732a6d1
+794|tap-794|https://embed14.streamc.xyz/embed.php?hash=ffffc9c2b19ffb4052cad01e736b96a7
+795|tap-795|https://embed14.streamc.xyz/embed.php?hash=a733c3cf1c1b005e191988d25cc45bad
+796|tap-796|https://embed14.streamc.xyz/embed.php?hash=233593c3e70ebb77e0c498ac49a65b68
+797|tap-797|https://embed14.streamc.xyz/embed.php?hash=ca606617b3d1567329bf251bf0c6570e
+798|tap-798|https://embed14.streamc.xyz/embed.php?hash=f2aae7453d64a4d28cfe51186e67cfbd
+799|tap-799|https://embed14.streamc.xyz/embed.php?hash=6ddbc52564e3c0d79b1f39800cb0ed02
+800|tap-800|https://embed14.streamc.xyz/embed.php?hash=bea9d3f096e99d321ab0585105df4720
+801|tap-801|https://embed15.streamc.xyz/embed.php?hash=99a3db1772c70785b3af54776c17c7a8
+802|tap-802|https://embed15.streamc.xyz/embed.php?hash=b576ce0c73a87bbc247f3c08fe6c3ece
+803|tap-803|https://embed15.streamc.xyz/embed.php?hash=e86d257cf015f3254f66e7cb4f1d5f8a
+804|tap-804|https://embed15.streamc.xyz/embed.php?hash=833d51861503773baf3e2cdf65558c73
+805|tap-805|https://embed15.streamc.xyz/embed.php?hash=ee9dc3bceef7455b22ff056d412c6611
+806|tap-806|https://embed15.streamc.xyz/embed.php?hash=4a661c068ac5d8c6c9dbdcc680626b5a
+807|tap-807|https://embed18.streamc.xyz/embed.php?hash=5f739556ee33704e688e70728a52a0ed
+808|tap-808|https://embed18.streamc.xyz/embed.php?hash=c81e62f86221f5b6fef2acf2a2cd22b7
+809|tap-809|https://embed18.streamc.xyz/embed.php?hash=902c42fbad722ac00ba97167eed961ac
+810|tap-810|https://embed18.streamc.xyz/embed.php?hash=4548974e1bb343215a91c53683ea6d9c
+811|tap-811|https://embed18.streamc.xyz/embed.php?hash=7cf1a7c4c691ada67ab8da2a75f8d133
+812|tap-812|https://embed18.streamc.xyz/embed.php?hash=e29e4bf48630b167a2bbfe0325898d56
+813|tap-813|https://embed18.streamc.xyz/embed.php?hash=9f3fb86502cfd2d6580a2bdda8cca320
+814|tap-814|https://embed18.streamc.xyz/embed.php?hash=e7a669affb2609fa0aa717a5ad874487
+815|tap-815|https://embed18.streamc.xyz/embed.php?hash=4fa4d70886126caca52dd63b19ceacd7
+816|tap-816|https://embed18.streamc.xyz/embed.php?hash=366405414b528fcdf7877e9ef77c7d45
+817|tap-817|https://embed18.streamc.xyz/embed.php?hash=f0f59ce266e7402d905b5855c5fe8050
+818|tap-818|https://embed13.streamc.xyz/embed.php?hash=104c3e3fa9e0818f6f751fcdd8492559
+819|tap-819|https://embed13.streamc.xyz/embed.php?hash=efebd29e44e16ba176a280956ab21f0a
+820|tap-820|https://embed13.streamc.xyz/embed.php?hash=69586cabc4e7177e8106af9d3a074de3
+821|tap-821|https://embed13.streamc.xyz/embed.php?hash=be047c2a4c7d96e3e3ed36d81e96927c
+822|tap-822|https://embed13.streamc.xyz/embed.php?hash=f7174dd0c3e47e83a4f09074d907a2f8
+823|tap-823|https://embed13.streamc.xyz/embed.php?hash=40980c120c11e514959d1aba51a78c09
+824|tap-824|https://embed13.streamc.xyz/embed.php?hash=41bcc19eb07d9a149bc8448c403696c6
+825|tap-825|https://embed13.streamc.xyz/embed.php?hash=042e176c2752b0a90d983faf7ad36844
+826|tap-826|https://embed13.streamc.xyz/embed.php?hash=52f6697f07d364011ec8a441d27c240d
+827|tap-827|https://embed13.streamc.xyz/embed.php?hash=ac7d8f437ce2861d657d7df02a9d4b1c
+828|tap-828|https://embed13.streamc.xyz/embed.php?hash=8a09d8cf0c470aa7bfefcd3f4f6ad572
+829|tap-829|https://embed12.streamc.xyz/embed.php?hash=bda70ee8f1d2c0a57c2efc4603eac63e
+830|tap-830|https://embed12.streamc.xyz/embed.php?hash=3ea6d0533a1037c4d3c42181bc2725c3
+831|tap-831|https://embed12.streamc.xyz/embed.php?hash=77cfe2d3736e62c514b645158846f64d
+832|tap-832|https://embed12.streamc.xyz/embed.php?hash=34c3f5f0ca51bcfc4e196b58bbd8a9b9
+833|tap-833|https://embed12.streamc.xyz/embed.php?hash=b918ab2413d139b49ce4005f87129b14
+834|tap-834|https://embed12.streamc.xyz/embed.php?hash=745f00244e4b1f0dfe0b2ed48d1af87c
+835|tap-835|https://embed12.streamc.xyz/embed.php?hash=08971762c49aede13f3974e1d2b5f707
+836|tap-836|https://embed12.streamc.xyz/embed.php?hash=e8841210f9b382921541b55eb19f4132
+837|tap-837|https://embed12.streamc.xyz/embed.php?hash=a3c404479a94d7cb407ebe11ec3291af
+838|tap-838|https://embed12.streamc.xyz/embed.php?hash=faf9039ee4c9bf7bde1a67b123f21fd1
+839|tap-839|https://embed12.streamc.xyz/embed.php?hash=9d2a90dacedfc9e9e75620751d439220
+840|tap-840|https://embed11.streamc.xyz/embed.php?hash=0fad58b47e0dbbebc914bd6585dcbe14
+841|tap-841|https://embed11.streamc.xyz/embed.php?hash=e73811bd8e4386cf51bc0f8516640e03
+842|tap-842|https://embed11.streamc.xyz/embed.php?hash=be00b81eb01c434cc4059f4cdbc2ccd7
+843|tap-843|https://embed11.streamc.xyz/embed.php?hash=aeda9be88e3192cf7023ab7ead168526
+844|tap-844|https://embed11.streamc.xyz/embed.php?hash=7d05d130f8d8e5d6e6b26fcd4cdc42a8
+845|tap-845|https://embed11.streamc.xyz/embed.php?hash=16db56b78cd139763244639c70f077e2
+846|tap-846|https://embed11.streamc.xyz/embed.php?hash=7cbc0ab5b523fbbf10bfcb335b1096ad
+847|tap-847|https://embed11.streamc.xyz/embed.php?hash=91f763c06cf691311710fd7e1151a786
+848|tap-848|https://embed11.streamc.xyz/embed.php?hash=90610c0d27692cdefe3094a8f73449da
+849|tap-849|https://embed11.streamc.xyz/embed.php?hash=f80507c839cbb57cd25dcfc488173a73
+850|tap-850|https://embed11.streamc.xyz/embed.php?hash=ca617892396e97ddd35c209dd2f522f9
+851|tap-851|https://embed15.streamc.xyz/embed.php?hash=ae3be8d150ee61846d2b99ee10405e6e
+852|tap-852|https://embed15.streamc.xyz/embed.php?hash=d6444eb4a7ccd7281d09f0e3322f31b6
+853|tap-853|https://embed15.streamc.xyz/embed.php?hash=e241a819675b58996a88ae15b90851aa
+854|tap-854|https://embed15.streamc.xyz/embed.php?hash=9811b1662898f7a2b90f404acfe80111
+855|tap-855|https://embed15.streamc.xyz/embed.php?hash=ce139fbabcd97172bdcbaf93d8eb9c2c
+856|tap-856|https://embed15.streamc.xyz/embed.php?hash=ae007815d4cc7b7e83293138a8780673
+857|tap-857|https://embed18.streamc.xyz/embed.php?hash=48f7a0861b132169b72b8f8016b03d40
+858|tap-858|https://embed18.streamc.xyz/embed.php?hash=47e31c0866854ddbbadf54621ed627f3
+859|tap-859|https://embed18.streamc.xyz/embed.php?hash=1c197a48d04b61aa7fd35c363d10134a
+860|tap-860|https://embed18.streamc.xyz/embed.php?hash=4d00727ba9b0c441deed9199f5dcf1df
+861|tap-861|https://embed18.streamc.xyz/embed.php?hash=069fe5ace6ded1d1b4e969d3b1117faa
+862|tap-862|https://embed18.streamc.xyz/embed.php?hash=c796eee41014aa1d4d5df2201273d2ce
+863|tap-863|https://embed18.streamc.xyz/embed.php?hash=0fe6be37e32c8a9125aa5abd4a07bf58
+864|tap-864|https://embed18.streamc.xyz/embed.php?hash=025f2001de1dba4834c065ae9ee3d634
+865|tap-865|https://embed18.streamc.xyz/embed.php?hash=3a69048341b74e8280bbf731e01fc474
+866|tap-866|https://embed18.streamc.xyz/embed.php?hash=326416af9f4c8178c17ae43603e4d930
+867|tap-867|https://embed18.streamc.xyz/embed.php?hash=b2f46c7a5f833ab3f123e33886b600a5
+868|tap-868|https://embed13.streamc.xyz/embed.php?hash=816a97a13a2abbbd16e78f79a882880a
+869|tap-869|https://embed13.streamc.xyz/embed.php?hash=18f2a6e14d6daa0e15f3d9e314d8e1fa
+870|tap-870|https://embed13.streamc.xyz/embed.php?hash=3a75d6e2b3d0fe3c520bab4bf4d6cfd2
+871|tap-871|https://embed13.streamc.xyz/embed.php?hash=c0cbcbce5de4fc2db40df62fb75ae4e7
+872|tap-872|https://embed13.streamc.xyz/embed.php?hash=acbc887d65580013b8e33edae96513d0
+873|tap-873|https://embed13.streamc.xyz/embed.php?hash=7b3e238c1473ba7356f52843e40b829a
+874|tap-874|https://embed13.streamc.xyz/embed.php?hash=94c0609be3f2cfd245b23b3c89a7e3c0
+875|tap-875|https://embed13.streamc.xyz/embed.php?hash=505213c7d472a0a0263b688ef9e02f0b
+876|tap-876|https://embed13.streamc.xyz/embed.php?hash=b907695265fc30a7585f0260a96fc0ae
+877|tap-877|https://embed13.streamc.xyz/embed.php?hash=25abe30a51c05fc98a71949f73d82ce2
+878|tap-878|https://embed13.streamc.xyz/embed.php?hash=c676624b34d92748b7b36132e814eddb
+879|tap-879|https://embed12.streamc.xyz/embed.php?hash=fc9e24c88483ea29803529e8c671c33e
+880|tap-880|https://embed12.streamc.xyz/embed.php?hash=4b46c84354d1d912eee51b90adf883b3
+881|tap-881|https://embed12.streamc.xyz/embed.php?hash=72e5d4094f480601725556fa1eacd8b6
+882|tap-882|https://embed12.streamc.xyz/embed.php?hash=c0321ec070045295dc6c533703de3580
+883|tap-883|https://embed12.streamc.xyz/embed.php?hash=3fc99898e283dd6175a70fd06265bbc2
+884|tap-884|https://embed12.streamc.xyz/embed.php?hash=b1162927e4225621371ad541d2bcea78
+885|tap-885|https://embed12.streamc.xyz/embed.php?hash=b58a61f49ba2e89e821f26a8b572eabc
+886|tap-886|https://embed12.streamc.xyz/embed.php?hash=59934ce836b828a23b836011b1e783d3
+887|tap-887|https://embed12.streamc.xyz/embed.php?hash=1bcaa9880b7ae10fb97e46dc18355e93
+888|tap-888|https://embed12.streamc.xyz/embed.php?hash=69288be68d13c891deaf953731420fbd
+889|tap-889|https://embed12.streamc.xyz/embed.php?hash=91ff97f344149c58ea11c833492ad681
+890|tap-890|https://embed11.streamc.xyz/embed.php?hash=899e22e510a69589507698f74fac5661
+891|tap-891|https://embed11.streamc.xyz/embed.php?hash=4aeb4c393fef470bbf286a8e169e92e0
+892|tap-892|https://embed11.streamc.xyz/embed.php?hash=9c5bb56963b35f03de88684d2fc94ade
+893|tap-893|https://embed11.streamc.xyz/embed.php?hash=ce90b6e0766de475595f61ac7dff47c8
+894|tap-894|https://embed11.streamc.xyz/embed.php?hash=6a596f89178de00dc3b50c3fd79f9662
+895|tap-895|https://embed11.streamc.xyz/embed.php?hash=374bea7c7138f05dd99e5c9c20211e52
+896|tap-896|https://embed11.streamc.xyz/embed.php?hash=124aa1076f0186cd790fe377f20c69c8
+897|tap-897|https://embed11.streamc.xyz/embed.php?hash=c10909f7f96bc1f7f92412881bc1284e
+898|tap-898|https://embed11.streamc.xyz/embed.php?hash=5a66aeb9a1d57a431a506c46c842ba73
+899|tap-899|https://embed11.streamc.xyz/embed.php?hash=275a05a6bbaa45f20bb5bd7ca3badbaf
+900|tap-900|https://embed11.streamc.xyz/embed.php?hash=25aa1c2ed9f846fda618f8b5a22b45a9
+901|tap-901|https://embed14.streamc.xyz/embed.php?hash=30b014fd164f556f81a5324358438fcc
+902|tap-902|https://embed14.streamc.xyz/embed.php?hash=a16c08129d42ae018807d6e6dc2d75c4
+903|tap-903|https://embed14.streamc.xyz/embed.php?hash=88119917d4b947031a0d4d8a886dc31a
+904|tap-904|https://embed14.streamc.xyz/embed.php?hash=491b0aab29bf64cce5d8b9d1f2e15237
+905|tap-905|https://embed14.streamc.xyz/embed.php?hash=6128cc99152f241be7b51006cdc570cc
+906|tap-906|https://embed14.streamc.xyz/embed.php?hash=f14032f360fe98958198a471f6cab8be
+907|tap-907|https://embed14.streamc.xyz/embed.php?hash=e514a83be873a2e0383334d7c4260560
+908|tap-908|https://embed14.streamc.xyz/embed.php?hash=f36a083a81994e33dbf74d24f36ac8a0
+909|tap-909|https://embed14.streamc.xyz/embed.php?hash=08cedf6a94e8f872bfcb2011cd1f66e8
+910|tap-910|https://embed14.streamc.xyz/embed.php?hash=633aee393963c3b12c179293c2cd35df
+911|tap-911|https://embed14.streamc.xyz/embed.php?hash=95b069fd56f04765ea6fd6475a4ec5a9
+912|tap-912|https://embed14.streamc.xyz/embed.php?hash=68a624324d84544ddab5ab0c281b53c1
+913|tap-913|https://embed14.streamc.xyz/embed.php?hash=175fde3f984dcccb2a9e23419f6762c3
+914|tap-914|https://embed14.streamc.xyz/embed.php?hash=765b7478e4af13b18e3cc0e1707d6428
+915|tap-915|https://embed14.streamc.xyz/embed.php?hash=a757c845cc2441ee38388d1647623747
+916|tap-916|https://embed14.streamc.xyz/embed.php?hash=5626259051238f0f703bfc2cf5605030
+917|tap-917|https://embed14.streamc.xyz/embed.php?hash=054499bc0dbb38eeb20f0e79cdc990fb
+918|tap-918|https://embed14.streamc.xyz/embed.php?hash=337894eee077ae273cab2fcd8ca10ffe
+919|tap-919|https://embed14.streamc.xyz/embed.php?hash=7119e52f5bace7094b007f27fff95864
+920|tap-920|https://embed14.streamc.xyz/embed.php?hash=fa0633c706359f747db5c4f27574ae9a
+921|tap-921|https://embed14.streamc.xyz/embed.php?hash=31dd486820d3fa7ab8556e12de5d1bc7
+922|tap-922|https://embed14.streamc.xyz/embed.php?hash=8692956e8a80eaf2a80584e21be8f98f
+923|tap-923|https://embed14.streamc.xyz/embed.php?hash=213d8f4e0bc84b5c753759d971792d35
+924|tap-924|https://embed14.streamc.xyz/embed.php?hash=fa404639f581b7cce805c3c1cc22e367
+925|tap-925|https://embed14.streamc.xyz/embed.php?hash=ec0afb1aae121fcf0f0c85838aba548c
+926|tap-926|https://embed14.streamc.xyz/embed.php?hash=e95e8560b9cb5cd7179b11494824bb80
+927|tap-927|https://embed14.streamc.xyz/embed.php?hash=fea8541693a350e16af1d6a63d5ccf8e
+928|tap-928|https://embed14.streamc.xyz/embed.php?hash=bb9fa716b4b48025483425d9251b75ee
+929|tap-929|https://embed14.streamc.xyz/embed.php?hash=8da04b3f2847bf728710901fa86478e4
+930|tap-930|https://embed14.streamc.xyz/embed.php?hash=850d4ee707abd867a9ca8b31a8b7433d
+931|tap-931|https://embed15.streamc.xyz/embed.php?hash=5a7f70d550664213e4a29a1b81f01f30
+932|tap-932|https://embed15.streamc.xyz/embed.php?hash=40ddaafb6673fae54d3ebe278c331829
+933|tap-933|https://embed15.streamc.xyz/embed.php?hash=b42a8767b27cce4ea6951e1d13975bfa
+934|tap-934|https://embed15.streamc.xyz/embed.php?hash=fefbdf85e19b939893092cb0331cb0b6
+935|tap-935|https://embed15.streamc.xyz/embed.php?hash=2cbf24efbc39b96c81bb93de6ecdb41a
+936|tap-936|https://embed15.streamc.xyz/embed.php?hash=fa5736de7b8365bea0b9c586e26d5eb1
+937|tap-937|https://embed15.streamc.xyz/embed.php?hash=2916584cf0cf75aaa66c4507d6ed54eb
+938|tap-938|https://embed15.streamc.xyz/embed.php?hash=2405e888cecb4e4003d705109238c367
+939|tap-939|https://embed15.streamc.xyz/embed.php?hash=5d860626efd11699d4e64853e3511efa
+940|tap-940|https://embed15.streamc.xyz/embed.php?hash=e6708a5e2211189e225036dd63388b22
+941|tap-941|https://embed15.streamc.xyz/embed.php?hash=da994f22f3315505e63577f72ee40fa3
+942|tap-942|https://embed15.streamc.xyz/embed.php?hash=4e2c9b1a1fdb4eea182fb59858a7485b
+943|tap-943|https://embed15.streamc.xyz/embed.php?hash=f05a5a70b3b6eb436565ef1d07163988
+944|tap-944|https://embed15.streamc.xyz/embed.php?hash=c308989c5d4690431b934a973cd51047
+945|tap-945|https://embed15.streamc.xyz/embed.php?hash=a928a011df664fb7ebb6aaee8093003b
+946|tap-946|https://embed15.streamc.xyz/embed.php?hash=744805caf0f288ea783337e5c704a751
+947|tap-947|https://embed15.streamc.xyz/embed.php?hash=e04498869753538cc0c7b8b71ee918dd
+948|tap-948|https://embed15.streamc.xyz/embed.php?hash=64ec9a5f3586fa1e7f98c7aa04b7e98e
+949|tap-949|https://embed15.streamc.xyz/embed.php?hash=b8f1901c5e2d6b206ab80c74c2b22b4f
+950|tap-950|https://embed15.streamc.xyz/embed.php?hash=3df03c886004b032def00791091a729a
+951|tap-951|https://embed15.streamc.xyz/embed.php?hash=68119f942ac839335c7a08ac5311308e
+952|tap-952|https://embed15.streamc.xyz/embed.php?hash=5132e0736dec6b9066abc953079fed86
+953|tap-953|https://embed15.streamc.xyz/embed.php?hash=b843f1932a3fb54f4043f0e398458462
+954|tap-954|https://embed15.streamc.xyz/embed.php?hash=a40a192b2e8a4fc45db2f166adfc3e75
+955|tap-955|https://embed15.streamc.xyz/embed.php?hash=f3fdffaa7d8d9cac5cf6308afe54afe3
+956|tap-956|https://embed15.streamc.xyz/embed.php?hash=b10fb55eaeaac0f358768558d388ccaa
+957|tap-957|https://embed14.streamc.xyz/embed.php?hash=d830ccadeb78010765fe8c91b7e61421
+958|tap-958|https://embed14.streamc.xyz/embed.php?hash=9971c45f27a7c8e6f19bc2b370b856ee
+959|tap-959|https://embed15.streamc.xyz/embed.php?hash=9006f011999de21f24ccb9c941a7e076
+960|tap-960|https://embed15.streamc.xyz/embed.php?hash=5c86bc3982e86d983c242aed99502ba9
+961|tap-961|https://embed15.streamc.xyz/embed.php?hash=0299b63df2c51fbd0597c20d92d7dbe3
+962|tap-962|https://embed18.streamc.xyz/embed.php?hash=63de8f6860c1380664480877393ee9c5
+963|tap-963|https://embed18.streamc.xyz/embed.php?hash=48f58fda5c8e2f11bb9b25a81fcbe157
+964|tap-964|https://embed18.streamc.xyz/embed.php?hash=f1712240d43f2cc1a5a134fde46819c3
+965|tap-965|https://embed18.streamc.xyz/embed.php?hash=5640b16364767ca23c0ac4b278779bbc
+966|tap-966|https://embed18.streamc.xyz/embed.php?hash=ad5be6eb6cd9b9095b6bc079f5df821a
+967|tap-967|https://embed18.streamc.xyz/embed.php?hash=37c2db6ccbbaea0f612d2755123b2609
+968|tap-968|https://embed18.streamc.xyz/embed.php?hash=9749a26d7143ddb91923e96de9172ff7
+969|tap-969|https://embed18.streamc.xyz/embed.php?hash=40ce2f606d8093b334f13acbe4bfff51
+970|tap-970|https://embed18.streamc.xyz/embed.php?hash=365fb4e1e27dcdb97986cdfdb21089ed
+971|tap-971|https://embed15.streamc.xyz/embed.php?hash=71244a5e323d81764aac2d36fda15e5d
+972|tap-972|https://embed15.streamc.xyz/embed.php?hash=94a8c13e5407bf9b383a959b3656f280
+973|tap-973|https://embed15.streamc.xyz/embed.php?hash=0912e1fb9d334c2e74dc45ce1eb74712
+974|tap-974|https://embed15.streamc.xyz/embed.php?hash=ce8d3b8ab535f6670dfc20c44602b26b
+975|tap-975|https://embed14.streamc.xyz/embed.php?hash=4fa529478b6233122861699e5781c7c2
+976|tap-976|https://embed14.streamc.xyz/embed.php?hash=383f9075a78a2d7ab3bd5c1f1e5924f0
+977|tap-977|https://embed14.streamc.xyz/embed.php?hash=0a62742df296cdba2abc4bdc303bec8b
+978|tap-978|https://embed15.streamc.xyz/embed.php?hash=fa3f0e7768ba67b2b09b2810af8e117f
+979|tap-979|https://embed15.streamc.xyz/embed.php?hash=6dc886f9e0e7fdc6a7c00f1cf62ccd36
+980|tap-980|https://embed15.streamc.xyz/embed.php?hash=733fd250cd2f297b11a89bc499f9c424
+981|tap-981|https://embed18.streamc.xyz/embed.php?hash=7fcff11e9ead95be1f088d7da88a19c6
+982|tap-982|https://embed18.streamc.xyz/embed.php?hash=1d0ac32dcb9fe4f7aa62a768e7dfe211
+983|tap-983|https://embed18.streamc.xyz/embed.php?hash=3cfdcbbde7cbb5bf39b46b9251549b74
+984|tap-984|https://embed18.streamc.xyz/embed.php?hash=990f1936dff050d8d6561edc7dbe4b32
+985|tap-985|https://embed18.streamc.xyz/embed.php?hash=f2c47187742da305a13697f002bf329c
+986|tap-986|https://embed18.streamc.xyz/embed.php?hash=625ff3137c485791495134a28153ceb6
+987|tap-987|https://embed18.streamc.xyz/embed.php?hash=ebb34ae8c03321492e0cff36d6351f48
+988|tap-988|https://embed18.streamc.xyz/embed.php?hash=00035383abfc12e16d155e0e591ad3ba
+989|tap-989|https://embed18.streamc.xyz/embed.php?hash=04a92054f15dec5b088784675af66fe8
+990|tap-990|https://embed18.streamc.xyz/embed.php?hash=9c9b0e449a218e1bcd201ba52563c1f9
+991|tap-991|https://embed15.streamc.xyz/embed.php?hash=1ff2386d15f78d87bb44556ed459e429
+992|tap-992|https://embed14.streamc.xyz/embed.php?hash=1e105eb940739a620e11c0bd310d65ee
+993|tap-993|https://embed14.streamc.xyz/embed.php?hash=3b6e20dfe6507f65a44497600c4efa34
+994|tap-994|https://embed14.streamc.xyz/embed.php?hash=2fbddb66a549c2c5d3e6d6e8ce0139a9
+995|tap-995|https://embed14.streamc.xyz/embed.php?hash=29b3ac331899b45466661457f5048ff7
+996|tap-996|https://embed14.streamc.xyz/embed.php?hash=9cccdab5c48cafac71cce139e957b4ba
+997|tap-997|https://embed14.streamc.xyz/embed.php?hash=f01849edc450bec31907db7048489c74
+998|tap-998|https://embed14.streamc.xyz/embed.php?hash=d7aaa40c3b8711c46b72d1f1503c6105
+999|tap-999|https://embed14.streamc.xyz/embed.php?hash=456685fe84fc548a4689b23b06fdf0d7
+1000|tap-1000|https://embed18.streamc.xyz/embed.php?hash=2a3103dc3c977e95315707eef9bbce84
+1001|tap-1001|https://embed18.streamc.xyz/embed.php?hash=bfd4a5ad9158996198e57c3166b168bf
+1002|tap-1002|https://embed18.streamc.xyz/embed.php?hash=8131973bdf21876b68a51ac90f119854
+1003|tap-1003|https://embed18.streamc.xyz/embed.php?hash=b83bd0ca5c02af715d21e55a4f6170f8
+1004|tap-1004|https://embed18.streamc.xyz/embed.php?hash=648295ebb4734b88f6e792dc5edf272f
+1005|tap-1005|https://embed18.streamc.xyz/embed.php?hash=52ed2ddfbe2697c269f3073fe7819a74
+1006|tap-1006|https://embed18.streamc.xyz/embed.php?hash=66d5e97c78861392df185107d1507619
+1007|tap-1007|https://embed18.streamc.xyz/embed.php?hash=3476d39c36fbd85185dce09e319845a0
+1008|tap-1008|https://embed15.streamc.xyz/embed.php?hash=63ea763ca3fadb0addb2af393b9ab231
+1009|tap-1009|https://embed15.streamc.xyz/embed.php?hash=5488480a476647119803acb442c715dc
+1010|tap-1010|https://embed15.streamc.xyz/embed.php?hash=51ed0138011c2b0a3e743324b8f60d21
+1011|tap-1011|https://embed15.streamc.xyz/embed.php?hash=a21aaf138d66a6eeb4025444c4277e1d
+1012|tap-1012|https://embed15.streamc.xyz/embed.php?hash=6c829b4e8593d843c19129bb4dbe8eb1
+1013|tap-1013|https://embed15.streamc.xyz/embed.php?hash=4b539490445c3cd962524cec91620518
+1014|tap-1014|https://embed15.streamc.xyz/embed.php?hash=4144380664b168dda3bbb7dbb04ba2c5
+1015|tap-1015|https://embed15.streamc.xyz/embed.php?hash=0237068217aff9a91e349a44b2c8305e
+1016|tap-1016|https://embed15.streamc.xyz/embed.php?hash=1cfe29242328f15a465a31079eef80c3
+1017|tap-1017|https://embed18.streamc.xyz/embed.php?hash=31d6f85c8608b7757663e1bab8fe48e6
+1018|tap-1018|https://embed18.streamc.xyz/embed.php?hash=84acf78b90de80544d36dde6ea0eafaa
+1019|tap-1019|https://embed18.streamc.xyz/embed.php?hash=d90e3795f636a8b61f554f122a74ef67
+1020|tap-1020|https://embed18.streamc.xyz/embed.php?hash=c6902e1f268bb15dcc784d08803b1219
+1021|tap-1021|https://embed18.streamc.xyz/embed.php?hash=01ccffc74bcaedad51efd92fd7ff8abb
+1022|tap-1022|https://embed18.streamc.xyz/embed.php?hash=5069b97528d526104b725d077ef978f6
+1023|tap-1023|https://embed14.streamc.xyz/embed.php?hash=dcb736b7322c78e2456e0b0361547bd8
+1024|tap-1024|https://embed15.streamc.xyz/embed.php?hash=d6fac4f748e17c8f5e63527264accebf
+1025|tap-1025|https://embed15.streamc.xyz/embed.php?hash=cb79852b3c651af135a208ae04d54a83
+1026|tap-1026|https://embed15.streamc.xyz/embed.php?hash=0c874b0c10437cb4ba7f85727785ddee
+1027|tap-1027|https://embed15.streamc.xyz/embed.php?hash=122f09ee0763d149961f539f06ecf7bf
+1028|tap-1028|https://embed15.streamc.xyz/embed.php?hash=acd11ff9b7b2e4918b464fe7a24bc6f6
+1029|tap-1029|https://embed15.streamc.xyz/embed.php?hash=ba8726d9f53dc9284906a396d2b828f5
+1030|tap-1030|https://embed15.streamc.xyz/embed.php?hash=496c0bbbb4a330c4e0f74a203fd0e1f9
+1031|tap-1031|https://embed15.streamc.xyz/embed.php?hash=8db4b6d40c16ae5702932980da526852
+1032|tap-1032|https://embed15.streamc.xyz/embed.php?hash=f4e01a42d64ee09b4fb9d9828a3866b1
+1033|tap-1033|https://embed15.streamc.xyz/embed.php?hash=952f07592335b6d3b612024ffb72e9fb
+1034|tap-1034|https://embed15.streamc.xyz/embed.php?hash=99f86ea0313ec082a8ff1824487321bb
+1035|tap-1035|https://embed14.streamc.xyz/embed.php?hash=052c15064d8694710dfdb8a064101c93
+1036|tap-1036|https://embed14.streamc.xyz/embed.php?hash=868173a06b8df9082c75e428c1dbd784
+1037|tap-1037|https://embed14.streamc.xyz/embed.php?hash=6eea704770d17b9276f232c8c87c184c
+1038|tap-1038|https://embed14.streamc.xyz/embed.php?hash=8d30d27e460bce2a20d5f79e12ea2e8e
+1039|tap-1039|https://embed14.streamc.xyz/embed.php?hash=2f00eba6c5fd916591a54d05ed742604
+1040|tap-1040|https://embed14.streamc.xyz/embed.php?hash=dd2de31040decbb8876cbda7cec0d078
+1041|tap-1041|https://embed14.streamc.xyz/embed.php?hash=61fbaf904bc0845d87649e8b82f6e4d3
+1042|tap-1042|https://embed14.streamc.xyz/embed.php?hash=8e850713de8b046c81bcf6efd336d7cf
+1043|tap-1043|https://embed14.streamc.xyz/embed.php?hash=f3bed3d3dcf7d8b28934f3909d8d6521
+1044|tap-1044|https://embed14.streamc.xyz/embed.php?hash=0a38115c88d6b418ae41c5b9cd652b67
+1045|tap-1045|https://embed14.streamc.xyz/embed.php?hash=f2e0acb5842078e31497f546b4078365
+1046|tap-1046|https://embed14.streamc.xyz/embed.php?hash=1d965b4ff90b6dd848c840da2115c7c3
+1047|tap-1047|https://embed14.streamc.xyz/embed.php?hash=a352b50477e24673235efff66e0d541b
+1048|tap-1048|https://embed14.streamc.xyz/embed.php?hash=51d7b986be783f576fa74f46554aa7ac
+1049|tap-1049|https://embed14.streamc.xyz/embed.php?hash=1bc730f56cb30b8cb9ae1057035ef883
+1050|tap-1050|https://embed14.streamc.xyz/embed.php?hash=86dd05cecd0eccbfdf50b75733cdec31
+1051|tap-1051|https://embed14.streamc.xyz/embed.php?hash=defd614b6aaf9752e32da4353a44e70c
+1052|tap-1052|https://embed14.streamc.xyz/embed.php?hash=4aaaa7a9b2646fad4a4a9589e3f011ad
+1053|tap-1053|https://embed14.streamc.xyz/embed.php?hash=2726242f402f571a5d31a7292ffc7595
+1054|tap-1054|https://embed15.streamc.xyz/embed.php?hash=5edd009bf247d9e8b79fde3e0d53599a
+1055|tap-1055|https://embed15.streamc.xyz/embed.php?hash=30484b72f2705ee2f6d79fda048f98bb
+1056|tap-1056|https://embed15.streamc.xyz/embed.php?hash=c9b3fa6bab459b6bc88e4468dc5f8418
+1057|tap-1057|https://embed15.streamc.xyz/embed.php?hash=7ce7f284508624a5665b4e7dee475c7d
+1058|tap-1058|https://embed15.streamc.xyz/embed.php?hash=f4b005c6c060f49f8688cd794ffd6e0a
+1059|tap-1059|https://embed15.streamc.xyz/embed.php?hash=c1165cd535a33bb7f5a42ea28f7e9b72
+1060|tap-1060|https://embed15.streamc.xyz/embed.php?hash=9327be015165ec4f11d34b32a6beb626
+1061|tap-1061|https://embed14.streamc.xyz/embed.php?hash=2a44c4fc2cbf4defd19014e5d31a319d
+1062|tap-1062|https://embed14.streamc.xyz/embed.php?hash=81b0a4bc590dbeaf2654e10d8adfcfbe
+1063|tap-1063|https://embed14.streamc.xyz/embed.php?hash=4dcedc4298240b88f3d53460c7eca63e
+1064|tap-1064|https://embed14.streamc.xyz/embed.php?hash=79036bdc1c386018acd3af03a91bbb31
+1065|tap-1065|https://embed14.streamc.xyz/embed.php?hash=822ecc17f69c491f0e0064f15d3d5848
+1066|tap-1066|https://embed14.streamc.xyz/embed.php?hash=3b4bc0922fe2fc6f154c5ec531e07c6b
+1067|tap-1067|https://embed14.streamc.xyz/embed.php?hash=aa555867b819db7c733a4f6908ebc64b
+1068|tap-1068|https://embed15.streamc.xyz/embed.php?hash=f1fd7d47fd566386457db6b3e3916e73
+1069|tap-1069|https://embed14.streamc.xyz/embed.php?hash=a8b0ee46bc5c4276996d626a57acb4b2
+1070|tap-1070|https://embed18.streamc.xyz/embed.php?hash=9af288f273753c16210acb4c61ec2e09
+1071|tap-1071|https://embed15.streamc.xyz/embed.php?hash=df08140dae1e721f316b98f3385a05c7
+1072|tap-1072|https://embed15.streamc.xyz/embed.php?hash=4ceb2d15d77763e80abdab294ae88288
+1073|tap-1073|https://embed15.streamc.xyz/embed.php?hash=bc45dc5764876aa3c6fb868c833c0529
+1074|tap-1074|https://embed15.streamc.xyz/embed.php?hash=fa7762fe36b00924a76bd3f01b8e583e
+1075|tap-1075|https://embed15.streamc.xyz/embed.php?hash=79f0be00632e1b14f3ffbffeab17925c
+1076|tap-1076|https://embed15.streamc.xyz/embed.php?hash=5801f01c26a983d99302da94fdff1098
+1077|tap-1077|https://embed15.streamc.xyz/embed.php?hash=c372fc76928e8ba7344090f1c289a40f
+1078|tap-1078|https://embed15.streamc.xyz/embed.php?hash=973089a124bf0f222daf3135d4d3bd6f
+1079|tap-1079|https://embed15.streamc.xyz/embed.php?hash=28c51c5fdb5ca20630869f39e1d5f8e7
+1080|tap-1080|https://embed14.streamc.xyz/embed.php?hash=900b18030723e67ac1f44f486af1c6e9
+1081|tap-1081|https://embed14.streamc.xyz/embed.php?hash=2aeaee1748ba3369fdc2615c3d66ac03
+1082|tap-1082|https://embed14.streamc.xyz/embed.php?hash=8297f9fcc5aeedf0cb59de9611c1b75e
+1083|tap-1083|https://embed14.streamc.xyz/embed.php?hash=5e9aefb769009235b76d95869a1417d9
+1084|tap-1084|https://embed14.streamc.xyz/embed.php?hash=71a96f8fc3968aa7014406b9b1d8d62c
+1085|tap-1085|https://embed14.streamc.xyz/embed.php?hash=72e1eac5416c0fb20c7605d7ca82bcf7
+1086|tap-1086|https://embed14.streamc.xyz/embed.php?hash=a3b98540f23cce41f41cd176ac0a0942
+1087|tap-1087|https://embed14.streamc.xyz/embed.php?hash=c06510ed68cdd27d7346de25bd4364d5
+1088|tap-1088|https://embed14.streamc.xyz/embed.php?hash=472a8c7cb0632721b92a2daf1743f509
+1089|tap-1089|https://embed12.streamc.xyz/embed.php?hash=e7c3ae91c8c05e9bb0606dc3e4f98511
+1090|tap-1090|https://embed12.streamc.xyz/embed.php?hash=d9a8f56399365fc56b3b6d43a40bbd35
+1091|tap-1091|https://embed12.streamc.xyz/embed.php?hash=c17cf34d812e7360297f2b61e0d75be5
+1092|tap-1092|https://embed12.streamc.xyz/embed.php?hash=5305b00fe58efd597fd90838f0ad0f35
+1093|tap-1093|https://embed12.streamc.xyz/embed.php?hash=fd164ad9c61daf8354fb7925f0631bdd
+1094|tap-1094|https://embed12.streamc.xyz/embed.php?hash=35aeeba7ff662da077d5c57b7e655371
+1095|tap-1095|https://embed13.streamc.xyz/embed.php?hash=87f3972ef2c6646e01f764956c0ce766
+1096|tap-1096|https://embed13.streamc.xyz/embed.php?hash=cdd04264668a80a641c51cf64951b680
+1097|tap-1097|https://embed13.streamc.xyz/embed.php?hash=f72fd3f35800fb3da08792e3403a8c95
+1098|tap-1098|https://embed13.streamc.xyz/embed.php?hash=1306ad860785fa4acaba8ae76ae14e4c
+1099|tap-1099|https://embed13.streamc.xyz/embed.php?hash=4f1f6918cb76449f872588070acfd3d2
+1100|tap-1100|https://embed13.streamc.xyz/embed.php?hash=e4f1f7b30db860a079030b3499bc434e
+1101|tap-1101|https://embed13.streamc.xyz/embed.php?hash=43a5868f30141b5d678067d130c890d2
+1102|tap-1102|https://embed13.streamc.xyz/embed.php?hash=d6a192bd69304627027ed8f54ffb25c2
+1103|tap-1103|https://embed13.streamc.xyz/embed.php?hash=baf745fb7713434509459afeca87b5fc
+1104|tap-1104|https://embed18.streamc.xyz/embed.php?hash=0c09335b9faca9b01ed0e1ebd0a58c7e
+1105|tap-1105|https://embed18.streamc.xyz/embed.php?hash=0de022af9ac0864a309bacba4276ede7
+1106|tap-1106|https://embed18.streamc.xyz/embed.php?hash=176530126016191f9b2fd6e4a7ab94db
+1107|tap-1107|https://embed18.streamc.xyz/embed.php?hash=653a0c50f80994f0e8c1bcbc8eed1293
+1108|tap-1108|https://embed18.streamc.xyz/embed.php?hash=1acdd58e203ce1443a703628a0e9444d
+1109|tap-1109|https://embed18.streamc.xyz/embed.php?hash=7f93529908d40e2ed51d9435973c6413
+1110|tap-1110|https://embed18.streamc.xyz/embed.php?hash=f1a69a36e3a04ced97d878961e6c02a1
+1111|tap-1111|https://embed18.streamc.xyz/embed.php?hash=ae6b971d07cc7d01ba881350b4996ca6
+1112|tap-1112|https://embed1.streamc.xyz/embed.php?hash=99ef0ed2609f8319caf6c772c1aa5e07
+1113|tap-1113|https://embed1.streamc.xyz/embed.php?hash=576a1381cc4d5a7ce788bce4ff1225ef
+1114|tap-1114|https://embed1.streamc.xyz/embed.php?hash=4f5767a6e36fd9203b0a29e1c9c38e50
+1115|tap-1115|https://embed1.streamc.xyz/embed.php?hash=3e70562aa90a321456387ba9f95510f1
+1116|tap-1116|https://embed1.streamc.xyz/embed.php?hash=c6273435e87d9612003f0ac41a628633
+1117|tap-1117|https://embed1.streamc.xyz/embed.php?hash=00102906ac70194f4a820b6e57b9dce0
+1118|tap-1118|https://embed1.streamc.xyz/embed.php?hash=3335d013983f7bcb13e59ad60ab0c1f2
+1119|tap-1119|https://embed1.streamc.xyz/embed.php?hash=4f4382076f98e716a463c47066e9f47e
+1120|tap-1120|https://embed1.streamc.xyz/embed.php?hash=e2aa5d3d93656f360644a5177bc5fc11
+1121|tap-1121|https://embed1.streamc.xyz/embed.php?hash=bea4d9d51ea5e588d21422cbeb83bb9a
+1122|tap-1122|https://embed1.streamc.xyz/embed.php?hash=d94905138638f241403e6cd94ca92079
+1123|tap-1123|https://embed18.streamc.xyz/embed.php?hash=c8c7aa47e4dae04a9ecfce4864cd8903
+1124|tap-1124|https://embed18.streamc.xyz/embed.php?hash=623817e3b1b8e851e55bdc1e91851bc4
+1125|tap-1125|https://embed18.streamc.xyz/embed.php?hash=18f8259d9a4ae8bfecbc017c1ff3edb5
+1126|tap-1126|https://embed10.streamc.xyz/embed.php?hash=4f5049d34a3940697801051fba635b94
+1127|tap-1127|https://embed18.streamc.xyz/embed.php?hash=bba7b9c3b318b30ea032afce8d4fbf13
+1128|tap-1128|https://embed18.streamc.xyz/embed.php?hash=9c5112fef73473f1575129a9053dc9dd
+1129|tap-1129|https://embed13.streamc.xyz/embed.php?hash=f8cd93eab9a579d0c257f004a0bf6e27
+1130|tap-1130|https://embed18.streamc.xyz/embed.php?hash=8fdc386448cea35b537d9f34234eeeaf
+1131|tap-1131|https://embed12.streamc.xyz/embed.php?hash=f3c522f752f648cc794574a7fa7f0586
+1132|tap-1132|https://embed14.streamc.xyz/embed.php?hash=ed19ba37ee5b173a6478e3fc06933c1b
+1133|tap-1133|https://embed12.streamc.xyz/embed.php?hash=86005e6f7e27765673a184e498171fa5
+1134|tap-1134|https://embed15.streamc.xyz/embed.php?hash=c682ff795717b4ca6c52934229e3154a
+1135|tap-1135|https://embed11.streamc.xyz/embed.php?hash=1bb3061b4b614e363aca73b354353eec
+1136|tap-1136|https://embed10.streamc.xyz/embed.php?hash=56ba6a88e34b434857fed625fded5e0b
+1137|tap-1137|https://embed10.streamc.xyz/embed.php?hash=992c99ffe6b4af48ae3560ef0ba3ac8a
+1138|tap-1138|https://embed13.streamc.xyz/embed.php?hash=a19ca13871887a704f897e04567eb179
+1139|tap-1139|https://embed13.streamc.xyz/embed.php?hash=e4617f761d9df6e5dc6e71d1413ff267
+1140|tap-1140|https://embed11.streamc.xyz/embed.php?hash=857c3a84f9fddb06f85445b2cfffbfb5
+1141|tap-1141|https://embed11.streamc.xyz/embed.php?hash=9a46950ea9897da20f15fd383fa4cf06
+1142|tap-1142|https://embed11.streamc.xyz/embed.php?hash=66b90c70678fa8f13f4905e44a5a1da0
+1143|tap-1143|https://embed13.streamc.xyz/embed.php?hash=db801bf2214939ef2d0f50cacff6138d
+1144|tap-1144|https://embed14.streamc.xyz/embed.php?hash=00ac2047d8d351444adba911f2b246fd
+1145|tap-1145|https://embed14.streamc.xyz/embed.php?hash=7e5fa4432ccd1e35f7ad668018eca864
+1146|tap-1146|https://embed13.streamc.xyz/embed.php?hash=0dfa27bf4c76f690c8ad2c95e511cce2
+1147|tap-1147|https://embed14.streamc.xyz/embed.php?hash=edd1068d414297dd9715023bb65d5a20
+1148|tap-1148|https://embed15.streamc.xyz/embed.php?hash=fff769c90ae83624a312cd000bc7620d
+1149|tap-1149|https://embed11.streamc.xyz/embed.php?hash=3799cf89857d36e20febaeee746eb1c9
+1150|tap-1150|https://embed18.streamc.xyz/embed.php?hash=8aaaf3b620573318d2ae0726c235be06
+1151|tap-1151|https://embed18.streamc.xyz/embed.php?hash=aa2633d0df17224fe3781da82e8b5942
+1152|tap-1152|https://embed14.streamc.xyz/embed.php?hash=918fd327faeadde6a62905b972ee9726
+1153|tap-1153|https://embed14.streamc.xyz/embed.php?hash=7fa82f04ae94e29c18ef2bdd5d2a6ea0
+1154|tap-1154|https://embed15.streamc.xyz/embed.php?hash=98ff97083dd18b86c04e8869339f6d35
+1155|tap-1155|https://embed14.streamc.xyz/embed.php?hash=a44449516a37fd0b9078fef7c74d23ae
+1156|tap-1156|https://embed11.streamc.xyz/embed.php?hash=74b6d8f76e66404f73b35dfce62d62e9
+
+`;
+
+// ============================================================================
+// KHU VỰC 2: DỮ LIỆU PHIM SUITS (LUẬT SƯ ĐẤU TRÍ)
+// ============================================================================
+const PHIM_2_DATA = `
+1|tap-1|https://embed14.streamc.xyz/embed.php?hash=342074ec848eab81c8441fc1463355ac
+2|tap-2|https://embed14.streamc.xyz/embed.php?hash=de6adcd121c10181938255168180affb
+3|tap-3|https://embed14.streamc.xyz/embed.php?hash=f81d9f2ba1d1cd0d45ceab820f851ebb
+4|tap-4|https://embed14.streamc.xyz/embed.php?hash=0ffa861f289d8ff31eeee3337b6096d0
+5|tap-5|https://embed14.streamc.xyz/embed.php?hash=934e8771ab52fe9aec7ad6f58ddd570a
+6|tap-6|https://embed14.streamc.xyz/embed.php?hash=00040af29aa6823c4432b1b121ab130f
+7|tap-7|https://embed15.streamc.xyz/embed.php?hash=972b47e3df46b6fe7b6719a8b1d436f8
+8|tap-8|https://embed15.streamc.xyz/embed.php?hash=7ac56ef5e1ce3e2ffcaf4b5977d2ec67
+9|tap-9|https://embed15.streamc.xyz/embed.php?hash=a952e08bf8df76e7265ef9e831fc1dd8
+10|tap-10|https://embed15.streamc.xyz/embed.php?hash=8c5844d27c5c2b4fbe2affc921d2f738
+11|tap-11|https://embed15.streamc.xyz/embed.php?hash=09d0e879117e6221a5c25c23ed4af7e9
+12|tap-12|https://embed15.streamc.xyz/embed.php?hash=c74c332b8ad9decb40d3c05095d86597
+`;
+
+// ============================================================================
+// KHU VỰC 3: DỮ LIỆU PHIM SUITS (LUẬT SƯ ĐẤU TRÍ) II
+// ============================================================================
+const PHIM_3_DATA = `
+1|tap-1|https://embed15.streamc.xyz/embed.php?hash=c5db2f1f05ecd4824bcefeb0aff14830
+2|tap-2|https://embed15.streamc.xyz/embed.php?hash=67508d784d529f6b0ef66881abc3e3f9
+3|tap-3|https://embed15.streamc.xyz/embed.php?hash=3522c63bf4a2096dd3c6593098aa8e8a
+4|tap-4|https://embed15.streamc.xyz/embed.php?hash=2c07ec054023dc308f53a1d1e9edac2d
+5|tap-5|https://embed15.streamc.xyz/embed.php?hash=4fa06d637a948dfeb854715976a653c4
+6|tap-6|https://embed15.streamc.xyz/embed.php?hash=6bf069dc097d56f568c79240e21ee147
+7|tap-7|https://embed15.streamc.xyz/embed.php?hash=98133341bd0a8b7e51e96f12977d6286
+8|tap-8|https://embed15.streamc.xyz/embed.php?hash=981fd967ef60ee358d50a721a027be46
+9|tap-9|https://embed15.streamc.xyz/embed.php?hash=c67591ed1d89a94693fd14b47b08f6ec
+10|tap-10|https://embed15.streamc.xyz/embed.php?hash=89e0099403c589b763f87da7c255194b
+11|tap-11|https://embed15.streamc.xyz/embed.php?hash=bfe41aaee5a3fe9658d339180eced43e
+12|tap-12|https://embed15.streamc.xyz/embed.php?hash=566221a91f790d918d39ef12c166cd64
+13|tap-13|https://embed15.streamc.xyz/embed.php?hash=a95b6152e5f83bf87f0c65076bf45155
+14|tap-14|https://embed15.streamc.xyz/embed.php?hash=936a33f73df77172e7533b96dbf32e33
+15|tap-15|https://embed15.streamc.xyz/embed.php?hash=e81e6217fbc1e1ea5c1cc09cfcabd1bf
+16|tap-16|https://embed15.streamc.xyz/embed.php?hash=bd0768eb593486999cb0eb05240697b2
+`;
+// ============================================================================
+// KHU VỰC 4: DỮ LIỆU PHIM SUITS (LUẬT SƯ ĐẤU TRÍ) III
+// ============================================================================
+const PHIM_4_DATA = `
+1|tap-1|https://embed15.streamc.xyz/embed.php?hash=6994123e5990ec064060d5763adc1700
+2|tap-2|https://embed15.streamc.xyz/embed.php?hash=1302d9e51be805ab9065a882c4617412
+3|tap-3|https://embed16.streamc.xyz/embed.php?hash=9cb46119470c14f92ba51d5444fcb529
+4|tap-4|https://embed16.streamc.xyz/embed.php?hash=a8898888e8446884243a4dd8cc2b0b12
+5|tap-5|https://embed16.streamc.xyz/embed.php?hash=58cc6a67c6c227fd2a7d63dcd80b2694
+6|tap-6|https://embed16.streamc.xyz/embed.php?hash=f475f1693b8877d0d3c8462054e5a6da
+7|tap-7|https://embed16.streamc.xyz/embed.php?hash=be247af4aa845aeef4ad18066b91a989
+8|tap-8|https://embed16.streamc.xyz/embed.php?hash=18d51e451807089f1e2fcdd15b2c750b
+9|tap-9|https://embed16.streamc.xyz/embed.php?hash=9a85c3fce0db9d73d5fc32e6ae75e1f8
+10|tap-10|https://embed16.streamc.xyz/embed.php?hash=b16c195abe8553b71e0ec094f205b48c
+11|tap-11|https://embed16.streamc.xyz/embed.php?hash=6fd2c12d94c0c3e429b243aa7be289e7
+12|tap-12|https://embed16.streamc.xyz/embed.php?hash=3cdd4d44081c8512c188c8198d02b424
+13|tap-13|https://embed16.streamc.xyz/embed.php?hash=5ce2599ae91e2d8c021e079bf7fb820c
+14|tap-14|https://embed16.streamc.xyz/embed.php?hash=ff19b4b93a2ff7e11aa3d4f42d5e54b9
+15|tap-15|https://embed16.streamc.xyz/embed.php?hash=24c222887c3f4774e5666e3a2b96d057
+16|tap-16|https://embed16.streamc.xyz/embed.php?hash=ada9ac81cc34bc07f75a45c1b729cdb5
+`;
+
+// ============================================================================
+// KHU VỰC 5: DỮ LIỆU PHIM SUITS (LUẬT SƯ ĐẤU TRÍ) IV
+// ============================================================================
+const PHIM_5_DATA = `
+1|tap-1|https://embed12.streamc.xyz/embed.php?hash=b7ebeff107d261d4084adbc8424c9119
+2|tap-2|https://embed12.streamc.xyz/embed.php?hash=1c85e179058804dc12140d0be014cc94
+3|tap-3|https://embed12.streamc.xyz/embed.php?hash=739fdf5a657cdbc57ee21ade26fcc86a
+4|tap-4|https://embed12.streamc.xyz/embed.php?hash=d2191211ca03085c14c5677e089b9f11
+5|tap-5|https://embed12.streamc.xyz/embed.php?hash=4c934894b1a8a4243e159a46e8779102
+6|tap-6|https://embed12.streamc.xyz/embed.php?hash=d4f49670aa16ab5c2d50ca434268d677
+7|tap-7|https://embed12.streamc.xyz/embed.php?hash=5bdc20b4f56f195b2ed97abcc30de6ba
+8|tap-8|https://embed12.streamc.xyz/embed.php?hash=287a19aa789953c87238b57c48ae00f8
+9|tap-9|https://embed12.streamc.xyz/embed.php?hash=65240c89f5813ba52c8e8d1230809f0a
+10|tap-10|https://embed12.streamc.xyz/embed.php?hash=0aa6792622d3652db66e831609be2e2a
+11|tap-11|https://embed11.streamc.xyz/embed.php?hash=1b5b1c077a651a5fa7ca5dadb22b0a71
+12|tap-12|https://embed11.streamc.xyz/embed.php?hash=3588ac3ab37dd23912fbca28b1bf6680
+13|tap-13|https://embed11.streamc.xyz/embed.php?hash=bbbbb773880cccec1aeff116fd40a962
+14|tap-14|https://embed11.streamc.xyz/embed.php?hash=fe6f375d38315b88265270255afeb94c
+15|tap-15|https://embed11.streamc.xyz/embed.php?hash=8e5de4cd7fc0daff6f3bc297eb93d090
+16|tap-16|https://embed11.streamc.xyz/embed.php?hash=1bccac2dcc7053e3deb01c1c86872f9f
+`;
+
+// ============================================================================
+// KHU VỰC 6: DỮ LIỆU PHIM SUITS (LUẬT SƯ ĐẤU TRÍ) V
+// ============================================================================
+const PHIM_6_DATA = `
+1|tap-1|https://embed11.streamc.xyz/embed.php?hash=5e46756435c8683b9bd14e3ae5f56418
+2|tap-2|https://embed11.streamc.xyz/embed.php?hash=51a2c81195d39c24d914ddb00b1bf9bb
+3|tap-3|https://embed11.streamc.xyz/embed.php?hash=779edb08617a8a48811065a2dc945a60
+4|tap-4|https://embed11.streamc.xyz/embed.php?hash=6d02e5571d99337c33b1cd306b8710d8
+5|tap-5|https://embed11.streamc.xyz/embed.php?hash=e78340d1c540e3d47d21e3bc503a073f
+6|tap-6|https://embed11.streamc.xyz/embed.php?hash=0d7c66b227405c378855478805aa2c06
+7|tap-7|https://embed11.streamc.xyz/embed.php?hash=5026b067d3452d3cbdc57df23bed484d
+8|tap-8|https://embed11.streamc.xyz/embed.php?hash=8395dcba7cd4fa3d23ec5628fc322965
+9|tap-9|https://embed11.streamc.xyz/embed.php?hash=d86c35aecd8d61658d3684addec9c473
+10|tap-10|https://embed11.streamc.xyz/embed.php?hash=ace6419cd757bde72054dc5cf3146aee
+11|tap-11|https://embed11.streamc.xyz/embed.php?hash=c38728b651c03d766984ea5e3ad9cf35
+12|tap-12|https://embed11.streamc.xyz/embed.php?hash=f4ea9c9e53de181360c1951b264056e8
+13|tap-13|https://embed16.streamc.xyz/embed.php?hash=e543fe3094864dec9e3b6cf7c61eb350
+14|tap-14|https://embed16.streamc.xyz/embed.php?hash=7b1cbf874e347dbb71d6e1494c470ec1
+15|tap-15|https://embed16.streamc.xyz/embed.php?hash=45706247adff6794d543226f23e3e520
+16|tap-16|https://embed16.streamc.xyz/embed.php?hash=b515027b7b32b1a5e20d971c6ee4c36e
+`;
+
+// ============================================================================
+// KHU VỰC 7: DỮ LIỆU PHIM SUITS (LUẬT SƯ ĐẤU TRÍ) VI
+// ============================================================================
+const PHIM_7_DATA = `
+1|tap-1|https://embed16.streamc.xyz/embed.php?hash=bd0c15f97485b6598a7c766dded7ccda
+2|tap-2|https://embed16.streamc.xyz/embed.php?hash=9930aa6d26c702f9a7ac5247ecbdec10
+3|tap-3|https://embed16.streamc.xyz/embed.php?hash=789c801f5e38c7f3616b936d096da29d
+4|tap-4|https://embed16.streamc.xyz/embed.php?hash=e4ea01ecd9af9f618c2c3fa94057486b
+5|tap-5|https://embed16.streamc.xyz/embed.php?hash=4bcce02aee46890cb4c0c1114fe0d568
+6|tap-6|https://embed16.streamc.xyz/embed.php?hash=73e770277001b7154cace7e877048ec3
+7|tap-7|https://embed16.streamc.xyz/embed.php?hash=f52f79d6fec9b1fa77a660adb657954c
+8|tap-8|https://embed16.streamc.xyz/embed.php?hash=a0d84a6f116913d0166c2b69e3fcee0c
+9|tap-9|https://embed16.streamc.xyz/embed.php?hash=c27154256ddc83c70aca6fea8891fbbd
+10|tap-10|https://embed16.streamc.xyz/embed.php?hash=87d8e9fc0a9c4e219fbf620b56dbe4a4
+11|tap-11|https://embed16.streamc.xyz/embed.php?hash=fde5904d49f96ca2f76c940e1e6177ea
+12|tap-12|https://embed16.streamc.xyz/embed.php?hash=4cbc96885038231fb2496795402def70
+13|tap-13|https://embed16.streamc.xyz/embed.php?hash=7a495e9a0d197482ea690cd1498ff2e4
+14|tap-14|https://embed16.streamc.xyz/embed.php?hash=a9e73000954d2da70d7dd1d0458cc2d1
+15|tap-15|https://embed14.streamc.xyz/embed.php?hash=f6234d8322505d31d6b188fbebc102eb
+16|tap-16|https://embed14.streamc.xyz/embed.php?hash=e775b84fede6fc08eb1765c7af3f1746
+`;
+
+// ============================================================================
+// KHU VỰC 8: DỮ LIỆU PHIM SUITS (LUẬT SƯ ĐẤU TRÍ) VII
+// ============================================================================
+const PHIM_8_DATA = `
+1|tap-1|https://embed16.streamc.xyz/embed.php?hash=f1c4cfbcf3fd7a97c5f078a0c0dfba42
+2|tap-2|https://embed16.streamc.xyz/embed.php?hash=a6ee6609f3495d69aed4e8c9bbf71c4c
+3|tap-3|https://embed16.streamc.xyz/embed.php?hash=c9379fe84a8e5336d800cfa47e6b2d75
+4|tap-4|https://embed16.streamc.xyz/embed.php?hash=583ed0db18cc3aa9578f2392443afc79
+5|tap-5|https://embed16.streamc.xyz/embed.php?hash=feaed94f1ca16e73d6a81ff44e4cf6ed
+6|tap-6|https://embed16.streamc.xyz/embed.php?hash=8b3ea0a57f6d0979d076462135d618f3
+7|tap-7|https://embed16.streamc.xyz/embed.php?hash=ef60cb4bb04cbe871f68c451ee968bfd
+8|tap-8|https://embed16.streamc.xyz/embed.php?hash=c00ecd3df608c013e02c414edc724908
+9|tap-9|https://embed16.streamc.xyz/embed.php?hash=de687b3d67c441ce74ce1fbd8c00fc2f
+10|tap-10|https://embed16.streamc.xyz/embed.php?hash=3dc72a41fdd88aeec98575a09df5c2f0
+11|tap-11|https://embed16.streamc.xyz/embed.php?hash=230a68cfcd1f9c66744bd300ce4a7006
+12|tap-12|https://embed16.streamc.xyz/embed.php?hash=77af66fb01013653541f5650d6de8c84
+13|tap-13|https://embed16.streamc.xyz/embed.php?hash=f7f91d26c88927cb6c35cafd13f958c6
+14|tap-14|https://embed16.streamc.xyz/embed.php?hash=bd4586f9efa969ee1f3c04c829f97038
+15|tap-15|https://embed16.streamc.xyz/embed.php?hash=9ddec06db5595da68ceb57cf05e696d0
+16|tap-16|https://embed16.streamc.xyz/embed.php?hash=08d3263eb9db4e2866787589b788c44a
+`;
+
+// ============================================================================
+// KHU VỰC 9: DỮ LIỆU PHIM SUITS (LUẬT SƯ ĐẤU TRÍ) VIII
+// ============================================================================
+const PHIM_9_DATA = `
+1|tap-1|https://embed16.streamc.xyz/embed.php?hash=3d70ef797ab624060777e4b8ae1a6d52
+2|tap-2|https://embed16.streamc.xyz/embed.php?hash=6e40ca681a6b3ed90ff2ee9c3cb93086
+3|tap-3|https://embed16.streamc.xyz/embed.php?hash=a9d396cbe2a89a1943b087a5869bea34
+4|tap-4|https://embed16.streamc.xyz/embed.php?hash=7bf73884bcfa66f4b8e0d318ce2278bb
+5|tap-5|https://embed16.streamc.xyz/embed.php?hash=7ca4db111fe122a28091342a68f0fbef
+6|tap-6|https://embed16.streamc.xyz/embed.php?hash=be3b5ee208dc532644ad1558ca041b3e
+7|tap-7|https://embed16.streamc.xyz/embed.php?hash=7542fd53213547265005d4edf265fa20
+8|tap-8|https://embed16.streamc.xyz/embed.php?hash=241aba1e4cef97f9ce5af5741861a515
+9|tap-9|https://embed15.streamc.xyz/embed.php?hash=557fb9b4a947c8caa9bf1c7b2e0451de
+10|tap-10|https://embed15.streamc.xyz/embed.php?hash=695528ba43e9e3a1b40dfc368d5dafce
+11|tap-11|https://embed15.streamc.xyz/embed.php?hash=541c7e542965a8447534df2c7103f330
+12|tap-12|https://embed15.streamc.xyz/embed.php?hash=8a4a8c9458f947cd46ae20c3b494cc2f
+13|tap-13|https://embed15.streamc.xyz/embed.php?hash=42da4e0c721be86f64feea33a83c7e18
+14|tap-14|https://embed15.streamc.xyz/embed.php?hash=c1a40898b982a78ae285ae2374f1f1b9
+15|tap-15|https://embed15.streamc.xyz/embed.php?hash=5b90d795444b162a762a5b8b17b20e73
+16|tap-16|https://embed15.streamc.xyz/embed.php?hash=f72d23beeb751b3b832ae3e33dced8f2
+`;
+
+// ============================================================================
+// KHU VỰC 10: DỮ LIỆU PHIM SUITS (LUẬT SƯ ĐẤU TRÍ) IX
+// ============================================================================
+const PHIM_10_DATA = `
+1|tap-1|https://embed15.streamc.xyz/embed.php?hash=de248ff8cf369844f0859471ed140038
+2|tap-2|https://embed15.streamc.xyz/embed.php?hash=edc7d089e45cf872b80c95eb49cd9ba3
+3|tap-3|https://embed15.streamc.xyz/embed.php?hash=71001c01a7aa40498eabf28a1dba8580
+4|tap-4|https://embed15.streamc.xyz/embed.php?hash=af8a9356227d9ee4806060d5faabc4ab
+5|tap-5|https://embed15.streamc.xyz/embed.php?hash=c4e70f7cd4ad6a657f307c5dbbe57450
+6|tap-6|https://embed15.streamc.xyz/embed.php?hash=2e2734f76d1f80dd66012bbb9def273b
+7|tap-7|https://embed15.streamc.xyz/embed.php?hash=5769b979d8cafbbe4541806a13c2e38c
+8|tap-8|https://embed15.streamc.xyz/embed.php?hash=103b67e1f48d0f1ccd56a3b7f0592292
+9|tap-9|https://embed15.streamc.xyz/embed.php?hash=a0aabeaec217891676332daa783ce620
+10|tap-10|https://embed15.streamc.xyz/embed.php?hash=5495a499071ce68e3344001142477bba
+`;
+
+// ============================================================================
+// KHU VỰC 10: CẤU HÌNH (POSTER & TÊN)
+// ============================================================================
+const app = {
+    database: {
+        'phim-1': { title: "ONE PIECE (ĐẢO HẢI TẶC)", poster: "image/JoyBoy.jpg", raw: PHIM_1_DATA },
+        'phim-2': { title: "SUITS I", poster: "image/Suits 1.jpg", raw: PHIM_2_DATA },
+        'phim-3': { title: "SUITS II", poster: "image/Suits 2.jpg", raw: PHIM_3_DATA },
+        'phim-4': { title: "SUITS III", poster: "image/Suits 3.jpg", raw: PHIM_4_DATA },
+        'phim-5': { title: "SUITS IV", poster: "image/Suits 4.jpg", raw: PHIM_5_DATA },
+        'phim-6': { title: "SUITS V", poster: "image/Suits 5.jpg", raw: PHIM_6_DATA },
+        'phim-7': { title: "SUITS VI", poster: "image/Suits 6.jpg", raw: PHIM_7_DATA },
+        'phim-8': { title: "SUITS VII", poster: "image/Suits 7.jpg", raw: PHIM_8_DATA },
+        'phim-9': { title: "SUITS VIII", poster: "image/Suits 8.jpg", raw: PHIM_9_DATA },
+        'phim-10': { title: "SUITS IX", poster: "image/Suits 9.jpg", raw: PHIM_10_DATA }
+    },
+    
+    // ========================================================================
+    // LOGIC CODE (KHÔNG CẦN CHỈNH SỬA)
+    // ========================================================================
+    currentKey: null, list: [], watched: [], isReversed: true,
+
+    init: function() {
+        this.renderHome();
+        this.goHome();
+        document.getElementById('search-input').addEventListener('input', (e) => {
+            this.renderList(this.list.filter(ep => ep.id.toString().includes(e.target.value)));
+        });
+    },
+
+    renderHome: function() {
+        const grid = document.getElementById('home-grid');
+        grid.innerHTML = '';
+        for (const [key, movie] of Object.entries(this.database)) {
+            // Tự động ẩn các phim chưa có data (trống)
+            if(!movie.raw.trim()) continue;
+
+            const count = movie.raw.trim() ? movie.raw.trim().split('\n').length : 0;
+            const card = document.createElement('div');
+            card.className = 'movie-card';
+            card.innerHTML = `
+                <img src="${movie.poster}" class="poster-img" alt="${movie.title}" 
+                     onerror="this.onerror=null; this.src='https://placehold.co/300x450/333/FFF?text=Chưa+có+ảnh';">
+                <div class="movie-info"><div class="movie-name">${movie.title}</div><div class="movie-meta text-danger">${count} Tập phim</div></div>
+            `;
+            card.onclick = () => this.openMovie(key);
+            grid.appendChild(card);
+        }
+    },
+
+    goHome: function() {
+        document.getElementById('home-screen').style.display = 'block';
+        document.getElementById('player-screen').style.display = 'none';
+        document.getElementById('tab-home').classList.add('active');
+        document.getElementById('tab-movie').style.display = 'none';
+        document.getElementById('main-player').src = "";
+    },
+
+    openMovie: function(key) {
+        this.currentKey = key;
+        const movie = this.database[key];
+        const rawString = movie.raw.trim();
+        if(!rawString) return alert("Phim này chưa có data!");
+        
+        this.list = rawString.split('\n').map(line => {
+            const parts = line.split('|');
+            if(parts.length >= 3) return { id: parseInt(parts[0]) || parts[0], name: parts[1], url: parts[2].trim() };
+            return null;
+        }).filter(e => e !== null);
+        
+        if(this.list.length > 0 && !isNaN(this.list[0].id)) {
+            this.list.sort((a,b) => a.id - b.id);
+        }
+
+        document.getElementById('home-screen').style.display = 'none';
+        document.getElementById('player-screen').style.display = 'flex';
+        document.getElementById('tab-home').classList.remove('active');
+        const tabMovie = document.getElementById('tab-movie');
+        tabMovie.style.display = 'flex'; tabMovie.classList.add('active');
+        document.getElementById('tab-movie-name').innerText = movie.title;
+        document.getElementById('movie-name-display').innerText = movie.title;
+        document.getElementById('total-count').innerText = this.list.length;
+
+        const hist = localStorage.getItem('phucflex_' + key);
+        this.watched = hist ? JSON.parse(hist) : [];
+        this.renderList(this.list);
+    },
+    
+    showPlayer: function() {
+        if(this.currentKey) {
+            document.getElementById('home-screen').style.display = 'none';
+            document.getElementById('player-screen').style.display = 'flex';
+            document.getElementById('tab-home').classList.remove('active');
+            document.getElementById('tab-movie').classList.add('active');
+        }
+    },
+
+    renderList: function(dataArr) {
+        const container = document.getElementById('ep-container');
+        container.innerHTML = '';
+        const displayList = this.isReversed ? [...dataArr].reverse() : dataArr;
+        displayList.forEach(ep => {
+            const el = document.createElement('div');
+            el.className = 'ep-card'; 
+            el.innerText = isNaN(ep.id) ? ep.name : ep.id; 
+            el.title = ep.name; 
+
+            if(this.watched.includes(ep.id)) el.classList.add('watched');
+            el.onclick = () => {
+                this.play(ep);
+                document.querySelectorAll('.ep-card').forEach(c => c.classList.remove('active'));
+                el.classList.add('active');
+            };
+            container.appendChild(el);
+        });
+    },
+
+    play: function(ep) {
+        document.getElementById('main-player').src = ep.url;
+        document.getElementById('ep-status').innerText = "Đang xem: " + (ep.name || "Tập " + ep.id);
+        if(!this.watched.includes(ep.id)) {
+            this.watched.push(ep.id);
+            localStorage.setItem('phucflex_' + this.currentKey, JSON.stringify(this.watched));
+            const activeCard = document.querySelector('.ep-card.active');
+            if(activeCard) activeCard.classList.add('watched');
+        }
+    },
+
+    reverse: function() {
+        this.isReversed = !this.isReversed;
+        const val = document.getElementById('search-input').value;
+        this.renderList(this.list.filter(ep => ep.id.toString().includes(val)));
+    },
+
+    clearHistory: function() {
+        if(confirm("Bồ có chắc muốn xóa hết lịch sử xem của phim này không?")) {
+            this.watched = [];
+            localStorage.removeItem('phucflex_' + this.currentKey);
+            const val = document.getElementById('search-input').value;
+            this.renderList(this.list.filter(ep => ep.id.toString().includes(val)));
+        }
+    }
+};
+
+app.init();
+</script>
+</body>
+</html>
